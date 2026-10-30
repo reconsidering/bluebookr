@@ -3,7 +3,7 @@ services:
     name: bluebookr
     runtime: node
     plan: free
-    buildCommand: npm install --ignore-scripts && npm test
+    buildCommand: npm ci --ignore-scripts && npm test
     startCommand: npm start
     healthCheckPath: /
     envVars:

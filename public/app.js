@@ -7,3 +7,14 @@ $('type').addEventListener('change',render);$('example').onclick=()=>{for(const 
 $('form').onsubmit=async e=>{e.preventDefault();$('error').textContent='';citation=null;$('copy').disabled=true;$('copy-status').textContent='';$('result').textContent='Formatting…';$('warnings').replaceChildren();try{const response=await fetch('/api/format',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:$('type').value,...Object.fromEntries(new FormData($('form')))})});const data=await response.json();if(!response.ok)throw Error(data.error);citation=data;$('result').replaceChildren();const p=document.createElement('p');p.className='citation';for(const part of data.parts){const span=document.createElement('span');span.className=part.style;span.textContent=part.text;p.append(span);}$('result').append(p);for(const warning of data.warnings){const p=document.createElement('p');p.textContent=warning;$('warnings').append(p);}$('copy').disabled=false;}catch(error){$('error').textContent=error.message;$('result').textContent='Check your source details and try again.';}};
 $('copy').onclick=async()=>{try{await navigator.clipboard.writeText(citation.text);$('copy-status').textContent='Copied as plain text. Reapply italics and small caps in your document.';}catch{$('copy-status').textContent='Select the citation text and copy it manually.';}};
 render();
+
+$('import-form').onsubmit=async e=>{
+ e.preventDefault();const initialForm=JSON.stringify({type:$('type').value,...Object.fromEntries(new FormData($('form')))});const button=$('import-button');button.disabled=true;$('import-status').textContent='Reading your source…';
+ try{const value=$('source-url').value.trim();const isURL=/^https?:\/\//i.test(value);const response=await fetch(isURL?'/api/import':'/api/recognize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(isURL?{url:value}:{text:value})});const data=await response.json();if(!response.ok)throw Error(data.error);
+ if(initialForm!==JSON.stringify({type:$('type').value,...Object.fromEntries(new FormData($('form')))}))throw Error('Your source details changed while importing. Import again when you are ready to replace them.');
+ $('type').value=data.source.type;render();for(const input of $('form').elements){if(input.name){input.value=data.source[input.name]||'';if(input.value)input.title=data.provenance[input.name]||'Publisher metadata — review before use';}}
+ const missing=[...$('form').elements].filter(el=>el.required&&!el.value).map(el=>el.name);
+ $('import-status').textContent=missing.length?'Source imported. Add missing details: '+missing.join(', ')+'. Review the imported fields.':'Source imported. Review the details and citation below.';
+ if(!missing.length)$('form').requestSubmit();
+ }catch(error){$('import-status').textContent=error.message+' You can still enter details below.';}finally{button.disabled=false;}
+};
