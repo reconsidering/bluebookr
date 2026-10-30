@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="TaskPaneApp">
+  <Id>762eb57c-3a32-4929-856f-2bb41144b148</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Bluebookr</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Bluebookr"/>
+  <Description DefaultValue="Review legal citation drafts and cite websites in Word."/>
+  <SupportUrl DefaultValue="https://github.com/reconsidering/bluebookr"/>
+  <AppDomains><AppDomain>https://bluebookr.onrender.com</AppDomain></AppDomains>
+  <Hosts><Host Name="Document"/></Hosts>
+  <Requirements><Sets DefaultMinVersion="1.1"><Set Name="WordApi"/></Sets></Requirements>
+  <DefaultSettings><SourceLocation DefaultValue="https://bluebookr.onrender.com/word/taskpane.html"/></DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>
