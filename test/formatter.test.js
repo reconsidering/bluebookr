@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {formatCitation as f} from '../formatter.js';
+test('Supreme Court case with pinpoint',()=>assert.equal(f({type:'case',name:'Brown v. Board of Education',volume:'347',reporter:'U.S.',page:'483',pinpoint:'495',year:'1954'}).text,'Brown v. Board of Education, 347 U.S. 483, 495 (1954).'));
+test('court parenthetical',()=>assert.match(f({type:'case',name:'Example v. Sample',volume:'10',reporter:'F.3d',page:'20',court:'2d Cir.',year:'1993'}).text,/\(2d Cir. 1993\)/));
+test('statute',()=>assert.equal(f({type:'statute',title:'42',code:'U.S.C.',section:'1983'}).text,'42 U.S.C. § 1983.'));
+test('book edition and typography',()=>{const r=f({type:'book',author:'Jane Smith',title:'Law',pinpoint:'42',edition:'2d',year:'2024'});assert.equal(r.text,'Jane Smith, Law 42 (2d ed. 2024).');assert.equal(r.parts[0].style,'smallcaps');});
+test('article',()=>assert.equal(f({type:'article',author:'A. Author',title:'Law',volume:'12',journal:'Example L. Rev.',page:'1',year:'2024'}).text,'A. Author, Law, 12 Example L. Rev. 1 (2024).'));
+test('web date warning and URL validation',()=>{assert.equal(f({type:'web',title:'Law',site:'Example',url:'https://example.com'}).warnings.length,2);assert.throws(()=>f({type:'web',title:'Law',site:'Example',url:'javascript:alert(1)'}));});
+test('invalid inputs do not produce fabricated citations',()=>{for(const v of [null,[],{}, {type:'constructor'},{type:'case',name:'Name'}])assert.throws(()=>f(v));});

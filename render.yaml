@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: bluebookr
+    runtime: node
+    plan: free
+    buildCommand: npm install --ignore-scripts && npm test
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
