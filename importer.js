@@ -43,9 +43,9 @@ export function extractMetadata(html,url) {
  const entityName=value=>typeof value==='string'?(/^https?:\/\//i.test(value)?nodes.find(n=>n['@id']===value)?.name||'':value):value?.name||nodes.find(n=>n['@id']===value?.['@id'])?.name||'';
  const metaAuthors=$('meta[name="citation_author"]').map((_,el)=>clean($(el).attr('content'))).get().filter(Boolean);
  if(metaAuthors.length>1){source.author=[...new Set(metaAuthors)].join(' & ');provenance.author='Publisher citation author metadata';}
- if(!source.author&&articleNode?.author){source.author=[...new Set([articleNode.author].flat().map(entityName).map(clean).filter(Boolean))].join(' & ');provenance.author='Structured article author metadata';}
- if(!source.author){const authors=[...new Set($('a[rel="author"], [itemprop="author"] [itemprop="name"]').map((_,el)=>clean($(el).text())).get().filter(Boolean))];if(authors.length){source.author=authors.join(' & ');provenance.author='Article author byline';}}
- if(articleNode?.headline&&!get('citation_title','og:title','twitter:title')){source.title=clean(articleNode.headline);provenance.title='Structured article headline';}
+ if((!source.author||(originalArchived&&archiveBrand(source.author)))&&articleNode?.author){source.author=[...new Set([articleNode.author].flat().map(entityName).map(clean).filter(Boolean))].join(' & ');provenance.author='Structured article author metadata';}
+ if(!source.author||(originalArchived&&archiveBrand(source.author))){const authors=[...new Set($('a[rel="author"], [itemprop="author"] [itemprop="name"]').map((_,el)=>clean($(el).text())).get().filter(Boolean))];if(authors.length){source.author=authors.join(' & ');provenance.author='Article author byline';}}
+ if(articleNode?.headline&&(!get('citation_title','og:title','twitter:title')||(originalArchived&&archiveBrand(source.title)))){source.title=clean(articleNode.headline);provenance.title='Structured article headline';}
  if(!date&&articleNode?.datePublished){date=clean(articleNode.datePublished);year=date.match(/\b\d{4}\b/)?.[0]||'';provenance.date='Structured article publication date';}
  if(originalArchived){if(archiveBrand(source.author)){source.author='';provenance.author='Archive branding excluded; author not recovered';}if(archiveBrand(source.site)){source.site=publisherFor(originalArchived)||new URL(originalArchived).hostname;provenance.site=publisherFor(originalArchived)?'Verified original publisher identity':'Original website hostname — review publication name';}}
 
