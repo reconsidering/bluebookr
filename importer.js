@@ -1,7 +1,8 @@
+import {sourceRequestHeaders} from './http-headers.js';
 import {createHostScheduler,memoizeImport} from './request-policy.js';
 import {articleFromDOI,applyURLHints} from './citation-enrichment.js';
 import {createQueue} from './concurrency.js';
-import {archiveSnapshot,doiLink,shouldCheckArchive} from './link-tools.js';
+import {archiveSnapshot,doiLink,shouldCheckArchive,archiveOriginalURL,archiveReplayURL} from './link-tools.js';
 import {publisherFor,applyPublisher,accessFallback,researchGateQuery,scholarlyMatch} from './source-fallbacks.js';
 import {downloadLimit} from './import-limits.js';
 import {documentKind,extractDocument} from './documents.js';
@@ -66,7 +67,7 @@ async function downloadNow(url,signal) {
  if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw Error('Only public website addresses can be imported.');
  const address=addresses[0];
  return new Promise((resolve,reject)=>{
- const req=(url.protocol==='https:'?https:http).get(url,{signal,lookup:(_host,options,cb)=>options.all?cb(null,[address]):cb(null,address.address,address.family),headers:{'User-Agent':'Bluebookr/0.3 (citation metadata lookup)','Accept-Language':'en-US,en;q=0.8','Accept':'text/html,application/xhtml+xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain'}},res=>{
+ const req=(url.protocol==='https:'?https:http).get(url,{signal,lookup:(_host,options,cb)=>options.all?cb(null,[address]):cb(null,address.address,address.family),headers:sourceRequestHeaders},res=>{
  if([301,302,303,307,308].includes(res.statusCode)){res.resume();resolve({redirect:res.headers.location});return;}
  if(res.statusCode!==200){res.resume();const error=Error(`Source returned HTTP ${res.statusCode}. ${[401,402,403,429].includes(res.statusCode)?'The host restricts automated access; use an accessible source copy or enter details manually.':res.statusCode===404?'The link was not found; check for a missing file extension or trailing punctuation.':'Try again later or use an accessible copy.'}`);error.status=res.statusCode;reject(error);return;}
  let size=0;const chunks=[];res.on('data',chunk=>{size+=chunk.length;if(size>downloadLimit()){res.destroy(Error(`File exceeds the configured ${downloadLimit()/1024/1024} MB download limit.`));}else chunks.push(chunk);});res.on('end',()=>resolve({bytes:Buffer.concat(chunks),contentType:res.headers['content-type']}));res.on('error',reject);
@@ -77,7 +78,8 @@ const scheduleImport=createQueue(3);
 const cachedImport=memoizeImport(value=>scheduleImport(()=>runImport(value)));
 export function importURL(value){const url=sourceURL(value);url.hash='';return cachedImport(url.href);}
 async function runImport(value) {const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
- try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return applyURLHints(page.result,url.href);if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);let result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);result=await enrichDOI(result,controller.signal);applyURLHints(result,page.archive?.originalURL||url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned HTTP '+page.archive.originalStatus+'; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
+ try{let url=archiveReplayURL(sourceURL(value).href);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return applyURLHints(page.result,url.href);if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);let result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);if(archiveOriginalURL(value)){result.originalURL=archiveOriginalURL(value);if(result.source.type==='web')result.source.url=value;result.warnings.unshift('Imported an archived version; verify its capture date.');if(/^Wayback Machine$/i.test(result.source.title)){result.source.title='';result.requiresReview=true;result.warnings.unshift('The archive returned its viewer rather than source content. Paste a downloaded or copied source to continue.');}}
+ result=await enrichDOI(result,controller.signal);applyURLHints(result,page.archive?.originalURL||url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned HTTP '+page.archive.originalStatus+'; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
  finally{clearTimeout(timer);}
 }

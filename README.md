@@ -92,3 +92,13 @@ Render confirms default outbound IP ranges are shared across services in a regio
 ### Review-date access parentheticals
 
 `formatCitation` adds a Bluebook `(last visited …)` parenthetical to online citations without a usable publication date. `reviewDate` accepts YYYY-MM-DD; website and Word clients supply their local review day, while API-only default formatting uses America/New_York. Cached source metadata never supplies this date. Word uses a single captured date per scan. Dates are validated, and publication dates and non-web citation templates are preserved. This implementation covers undated online sources; archived/pasted versions and source-specific exceptions still require review.
+
+### Recognition and metadata transport regressions
+
+Signals such as See, e.g., are parsed separately from author names and retained with emphasis. Article parentheticals accept full calendar dates and warn that an online-release year may differ from the volume year. Word scans can isolate multiple semicolon/newline-separated full citations and leading note-marker characters rather than replacing those markers. Ambiguous ranges are left unchanged. Dates and bibliographic facts are not verified merely because a citation parses.
+
+HTTP content negotiation now permits application/json. Previously Crossref returned 406 for our HTML/PDF-only Accept header, preventing DOI and ResearchGate metadata recovery; this was reproduced against Crossref and the new header returned JSON successfully. Exact-title/author and DOI matching rules are retained.
+
+Direct Wayback links use the archive's raw replay endpoint to request file content, retain the user-facing archive URL, and resolve publisher identity from its original host. A Wayback viewer page is not treated as the document's title. Access restrictions or absent captures can still prevent recovery.
+
+In Word review mode, usable partial records for blocked sources have a source-verification checkbox before Apply/Replace. Automatic mode never applies them. Incomplete records get an Open original source link and Complete details / paste a copy action. These are review workflows, not successful live retrieval claims.

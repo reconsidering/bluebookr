@@ -20,6 +20,8 @@ export function formatCitation(input) {
   const parts=[]; const add=(text,style='normal')=>{if(options.citationStyle==='brief'&&style==='smallcaps')style=input.type==='book'&&text===s.title?'italic':'normal';if(style==='italic'&&options.emphasis==='underline')style='underline';if(text)parts.push({text,style});};
   const pin=s.pinpoint ? `, ${s.pinpoint}` : '';
   const warnings=[];
+  if(input.signal){if(!/^(See,\s*e\.g\.,|See also|See generally|See|But see|But cf\.|Cf\.|E\.g\.,|Accord|Compare)$/i.test(input.signal))throw Error('Unsupported citation signal.');add(input.signal,'italic');add(' ');}
+  if(input.type==='article'&&input.publicationDate&&input.publicationDate!==s.year)warnings.push('Journal citation uses the supplied year. Verify the volume year against the full publication date, which may be an earlier online-release date.');
   switch(input.type) {
     case 'case':
       add(s.name,'italic'); add(`, ${s.volume} ${s.reporter} ${s.page}${pin} (${s.court ? s.court+' ' : ''}${s.year}).`);

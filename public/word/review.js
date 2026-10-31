@@ -21,3 +21,9 @@ export function citationChanges(before,after){
 export async function goToCitation(entry,run=Word.run){
  await run([entry.range],async ctx=>{entry.range.load('text');await ctx.sync();if(entry.range.text!==entry.snapshot)throw Error('This citation changed. Scan again to locate it safely.');entry.range.select('Select');await ctx.sync();});
 }
+
+export function citationCandidates(text){
+ const candidates=[];const pattern=/[^;\r\n]+/g;let match;
+ while((match=pattern.exec(text))){const leading=match[0].match(/^[\s\u0001-\u0008]*/)[0].length;const value=match[0].slice(leading).trimEnd();if(!value)continue;const review=reviewText(value);if(review?.citation){if(text[match.index+match[0].length]===';'&&!value.endsWith('.')){review.citation.text=review.citation.text.replace(/\.$/,'');review.citation.parts.at(-1).text=review.citation.parts.at(-1).text.replace(/\.$/,'');}candidates.push({...review,text:value});}}
+ return candidates;
+}

@@ -1,6 +1,7 @@
+import {archiveOriginalURL} from './link-tools.js';
 // Editorial identities for these exact public hosts, not inferred from arbitrary domain names.
 const publishers=new Map([['ropercenter.cornell.edu','Roper Center for Public Opinion Research'],['assets.morningconsult.com','Morning Consult'],['morningconsult.com','Morning Consult'],['www.morningconsult.com','Morning Consult'],['www.opensecrets.org','OpenSecrets'],['opensecrets.org','OpenSecrets'],['www.bls.gov','Bureau of Labor Statistics'],['bls.gov','Bureau of Labor Statistics'],['www.politico.com','POLITICO'],['politico.com','POLITICO']]);
-export function publisherFor(url){return publishers.get(new URL(url).hostname)||'';}
+export function publisherFor(url){return publishers.get(new URL(archiveOriginalURL(url)||url).hostname)||'';}
 export function applyPublisher(result,url){if(result.source.type==='web'&&(!result.source.site||result.provenance?.site?.includes('hostname'))){const site=publisherFor(url);if(site){result.source.site=site;result.provenance.site='Verified publisher identity for this host';}}return result;}
 export function accessFallback(url,error){
  const u=new URL(url),site=publisherFor(url);if(!site)return null;

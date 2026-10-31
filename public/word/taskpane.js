@@ -14,6 +14,7 @@ $('scan').onclick=()=>guarded(async()=>{
  await release();$('results').replaceChildren();
  const result=await automaticFix($('scope').value,status,{reviewOnly:true,...preferences()});entries=result.suggestions;
  showSupraGroups(entries);for(const entry of entries)showReview(entry);
+ for(const failure of result.failures||[])showRecovery(failure);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
  status(`${entries.length} individual corrections ready. ${result.unresolved} items need manual review. Nothing has been replaced.`);
 });
@@ -24,7 +25,7 @@ function showReview(entry){const card=document.createElement('article');const or
  const legend=document.createElement('p');legend.textContent='Changes: strikethrough = removed; underline = added. Final citation typography appears above. This comparison shows text changes, not existing Word formatting.';card.append(legend);
  const edit=document.createElement('textarea');edit.value=entry.citation.text;edit.setAttribute('aria-label','Edit suggested citation');card.append(edit);
  const updateMarkup=()=>{markup.replaceChildren();for(const part of citationChanges(entry.original,edit.value)){const span=document.createElement(part.kind==='delete'?'del':part.kind==='insert'?'ins':'span');span.textContent=part.text;markup.append(span);}if(edit.value===entry.original){const note=document.createElement('p');note.textContent='No text changes. Review proposed italics and small caps above.';markup.append(note);}};edit.addEventListener('input',updateMarkup);updateMarkup();
- const apply=document.createElement('button');apply.textContent='Apply / Replace';apply.onclick=()=>guarded(async()=>{const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});if(demoMode){suggestion.innerHTML=citationHTML(citation);apply.disabled=true;status('Preview: correction accepted in this sample only. No document was changed.');return;}await Word.run([entry.range],async ctx=>{entry.range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(entry.range.text!==entry.snapshot||(entry.hyperlink&&entry.range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');entry.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();});apply.disabled=true;edit.disabled=true;locate.disabled=true;status('Correction applied. Use Word Undo to reverse it.');});card.append(apply);}
+ const apply=document.createElement('button');apply.textContent='Apply / Replace';if(entry.requiresConfirmation){const label=document.createElement('label');const confirm=document.createElement('input');confirm.type='checkbox';confirm.style.width='auto';label.append(confirm,document.createTextNode(' I checked the source details and accessed the cited version.'));card.append(label);apply.disabled=true;confirm.onchange=()=>{apply.disabled=!confirm.checked;};}apply.onclick=()=>guarded(async()=>{const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});if(demoMode){suggestion.innerHTML=citationHTML(citation);apply.disabled=true;status('Preview: correction accepted in this sample only. No document was changed.');return;}await Word.run([entry.range],async ctx=>{entry.range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(entry.range.text!==entry.snapshot||(entry.hyperlink&&entry.range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');entry.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();});apply.disabled=true;edit.disabled=true;locate.disabled=true;status('Correction applied. Use Word Undo to reverse it.');});card.append(apply);}
  const skip=document.createElement('button');skip.textContent='Skip';skip.onclick=()=>card.remove();card.append(skip);$('results').append(card);
 }
 for(const type of Object.keys(schemas)){const option=document.createElement('option');option.value=type;option.textContent=type;$('type').append(option);}
@@ -43,6 +44,7 @@ $('auto-fix').onclick=()=>guarded(async()=>{
  await release();$('results').replaceChildren();status('Finding citations and links…');
  const result=await automaticFix($('scope').value,status,preferences());
  status(`Applied ${result.fixed} replacements. ${result.unresolved} items need review. Changes are drafts; use Word Undo to reverse them.`);
+ for(const failure of result.failures||[])showRecovery(failure);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
 });
 
@@ -76,3 +78,8 @@ $('replace-link').onclick=()=>guarded(async()=>{
 });
 
 $('import-copy').onclick=()=>guarded(async()=>{const response=await fetch('/api/import-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:$('url').value,text:$('source-copy').value})});const data=await response.json();if(!response.ok)throw Error(data.error);$('type').value=data.source.type;fields(data.source);$('details').hidden=false;status(data.warnings.join(' '));});
+
+function showRecovery(failure){
+ if(!failure.url)return;const card=document.createElement('article');const heading=document.createElement('strong');heading.textContent='Source needs additional details';card.append(heading);const link=document.createElement('a');link.href=failure.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open original source in browser';card.append(document.createElement('br'),link);const reason=document.createElement('p');reason.textContent=failure.error;card.append(reason);
+ const recover=document.createElement('button');recover.textContent='Complete details / paste a copy';recover.onclick=()=>{$('url').value=failure.url;const source=failure.partial?.source;if(source){$('type').value=source.type;fields(source);$('details').hidden=false;}$('url').scrollIntoView({behavior:'smooth'});$('source-copy').closest('details').open=true;$('source-copy').focus();status('Open the source in your browser, then paste its details or complete the source fields.');};card.append(recover);$('results').append(card);
+}

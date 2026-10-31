@@ -1,0 +1,1 @@
+export const sourceRequestHeaders={'User-Agent':'Bluebookr/0.3 (citation metadata lookup)','Accept-Language':'en-US,en;q=0.8','Accept':'text/html,application/xhtml+xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain,application/json;q=0.9,*/*;q=0.5'};

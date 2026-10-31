@@ -80,3 +80,9 @@ Journal PDFs with a verified DOI/title match are imported as articles, not websi
 ## Last-visited dates
 
 Undated online citations now end in `(last visited Month Day, Year)`, using the Bluebookr review date rather than a cached source-fetch date. “Last visited” is the Bluebook wording for the requested last-accessed date. Missing, n.d., unknown, and undated publication values trigger this parenthetical; usable publication dates are retained. Word scans capture one date at scan start. Browser previews use the reviewer's local calendar day; API-only calls default to America/New_York or accept an explicit `reviewDate` in YYYY-MM-DD format. Citations already prepared retain their review date when applied later. This is the supported undated-web-source rule, not a comprehensive evaluation of mutable sources or every Rule 18 exception. An archive or pasted copy does not establish successful access to the original site; review the cited version and warning before applying. Print-style case/book/article citations are unchanged.
+
+### Reported citation recognition fixes
+
+See, e.g., Mason/Wronski, Campbell et al., and full-date Broockman/Kalla article patterns now have explicit regression tests. Signals are kept separate from authors. Multiple semicolon/newline-separated references are isolated where Word can identify one exact range; leading note-reference markers are left outside replacements. Ambiguous cases require selecting the citation individually. The Broockman/Kalla date is parsed as supplied, not silently verified or corrected to the journal's volume year. Real Word testing is still needed for the user's particular document layout.
+
+Blocked sources with known metadata now offer review-only suggestions that require confirming source details/access before replacement. Others have a recovery card linking to the original and the pasted-source/details controls. Re-scan after deploying these changes; old cards retain old suggestions.
