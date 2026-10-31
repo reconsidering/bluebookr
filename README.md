@@ -110,3 +110,11 @@ A private Windows setup executable, source, uninstaller, and build instructions 
 ### Word action reliability
 
 Manual review actions now resolve note/paragraph locators in fresh request contexts rather than relying solely on retained note proxies. Paragraph snapshots and note counts prevent stale/ambiguous replacements. Go to verifies the resulting selection and exposes safe errors beside its button. Formatting-preserving replacement captures source character font properties, uses the first cited character for mixed fonts, and deliberately separates document font inheritance from citation-specific emphasis. Native note operations remain subject to the installed Word API support; real-host verification is still required.
+
+### Whole-reference replacement and electronic access links
+
+Linked-reference planning determines whether a URL belongs to existing bibliographic text before any replacements. Matching references are expanded to one complete range and compared with available metadata, preventing URL-only insertion from duplicating preceding citation text. Offline references continue to receive formatting-only review. Ambiguous ownership and multiple URLs require review. Tests cover ordinary prose, separate references, existing available-at text, hyperlinked article titles, stale ranges, journal pinpoint retention, and single-write Word simulations.
+
+Book/article schemas now accept optional URL fields; provided links are preserved as emphasized available-at clauses, as requested by the user. Online-source and supra templates follow the same explicit URL-retention preference. The formatter reports sourceType. Article HTML parts explicitly reset inherited font-variant so authors/titles cannot simply inherit small caps intended for the journal; the supported native note path sets per-part typography separately from inherited font family/size.
+
+Archived HTML imports recognize viewer shells as unavailable source content, keep raw replay through redirects, and read structured author/headline/publisher/date and byline data when actual articles are present. The current sidebar version is 1.1.2. This release does not constitute a complete Bluebook audit or real Windows Word test.

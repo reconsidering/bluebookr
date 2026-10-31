@@ -24,9 +24,9 @@ export function extractMetadata(html,url) {
  $('meta').each((_,el)=>{const key=($(el).attr('name')||$(el).attr('property')||'').toLowerCase();const val=$(el).attr('content');if(val&&!meta.has(key))meta.set(key,val);});
  const clean=v=>String(v||'').replace(/\s+/g,' ').trim().slice(0,2000);
  const get=(...keys)=>clean(keys.map(k=>meta.get(k)).find(Boolean));
- const date=get('citation_publication_date','article:published_time','date','dc.date');
- const year=date.match(/\b\d{4}\b/)?.[0]||'';
- const source={type:'web',title:get('citation_title','og:title','twitter:title')||clean($('title').first().text()),author:get('citation_author','author','dc.creator'),site:get('og:site_name','application-name','dc.publisher','publisher'),url};
+ let date=get('citation_publication_date','article:published_time','date','dc.date');
+ let year=date.match(/\b\d{4}\b/)?.[0]||'';
+ const source={type:'web',title:get('citation_title','og:title','twitter:title')||clean($('title').first().text()),author:get('citation_author','author','dc.creator','dc:creator','parsely-author'),site:get('og:site_name','application-name','dc.publisher','publisher'),url};
  const provenance={title:'Page metadata or title',author:'Page metadata',site:'Page metadata',url:'Retrieved URL'};
  if(publisherFor(url)){if(!source.site){source.site=publisherFor(url);provenance.site='Verified publisher identity for source host';}if(source.title.includes('|'))source.title=source.title.split('|')[0].trim();}
  if(!source.site){source.site=new URL(url).hostname;provenance.site='Website hostname — review the publication name';}
@@ -34,9 +34,22 @@ export function extractMetadata(html,url) {
  const nodes=[];
  const collect=(value,depth=0)=>{if(depth>8||nodes.length>500)return;if(Array.isArray(value)){for(const v of value)collect(v,depth+1);}else if(value&&typeof value==='object'){nodes.push(value);if(value['@graph'])collect(value['@graph'],depth+1);if(value.mainEntity)collect(value.mainEntity,depth+1);}};
  $('script[type="application/ld+json"]').each((_,el)=>{try{collect(JSON.parse($(el).text()));}catch{}});
- const organization=nodes.find(n=>['Organization','NewsMediaOrganization','WebSite'].includes(n['@type']));
- const articleNode=nodes.find(n=>['Article','NewsArticle','ScholarlyArticle'].includes(n['@type']));
- if(!source.site||provenance.site.includes('hostname')){const publisher=articleNode?.publisher?.name||organization?.name||publisherFor(url);if(publisher){source.site=clean(publisher);provenance.site='Structured publisher metadata or verified host identity';}}
+ const hasType=(node,types)=>[node['@type']].flat().some(type=>types.includes(String(type).replace(/^https?:\/\/schema.org\//,'')));
+ const organization=nodes.find(n=>hasType(n,['Organization','NewsMediaOrganization','WebSite']));
+ const articleNode=nodes.find(n=>hasType(n,['Article','NewsArticle','ScholarlyArticle','BlogPosting']));
+ const originalArchived=archiveOriginalURL(url);
+ const archiveBrand=value=>/^(?:Wayback Machine|Internet Archive|web\.archive\.org)(?:\s*[-|:–—].*)?$/i.test(clean(value));
+ if(originalArchived&&archiveBrand(source.title)&&!articleNode&&!get('citation_title'))return {source:{type:'web',title:'',author:'',site:publisherFor(originalArchived),url},originalURL:originalArchived,requiresReview:true,provenance:{title:'Archived content unavailable — archive viewer received',author:'Not recovered from archived source',site:'Original publisher identity when known'},warnings:['Wayback returned its viewer rather than the archived article. Its branding is not the article title or author. Use an accessible capture, a downloaded source, or paste the article text.']};
+ const entityName=value=>typeof value==='string'?(/^https?:\/\//i.test(value)?nodes.find(n=>n['@id']===value)?.name||'':value):value?.name||nodes.find(n=>n['@id']===value?.['@id'])?.name||'';
+ const metaAuthors=$('meta[name="citation_author"]').map((_,el)=>clean($(el).attr('content'))).get().filter(Boolean);
+ if(metaAuthors.length>1){source.author=[...new Set(metaAuthors)].join(' & ');provenance.author='Publisher citation author metadata';}
+ if(!source.author&&articleNode?.author){source.author=[...new Set([articleNode.author].flat().map(entityName).map(clean).filter(Boolean))].join(' & ');provenance.author='Structured article author metadata';}
+ if(!source.author){const authors=[...new Set($('a[rel="author"], [itemprop="author"] [itemprop="name"]').map((_,el)=>clean($(el).text())).get().filter(Boolean))];if(authors.length){source.author=authors.join(' & ');provenance.author='Article author byline';}}
+ if(articleNode?.headline&&!get('citation_title','og:title','twitter:title')){source.title=clean(articleNode.headline);provenance.title='Structured article headline';}
+ if(!date&&articleNode?.datePublished){date=clean(articleNode.datePublished);year=date.match(/\b\d{4}\b/)?.[0]||'';provenance.date='Structured article publication date';}
+ if(originalArchived){if(archiveBrand(source.author)){source.author='';provenance.author='Archive branding excluded; author not recovered';}if(archiveBrand(source.site)){source.site=publisherFor(originalArchived)||new URL(originalArchived).hostname;provenance.site=publisherFor(originalArchived)?'Verified original publisher identity':'Original website hostname — review publication name';}}
+
+ if(!source.site||provenance.site.includes('hostname')){const publisher=entityName(articleNode?.publisher)||organization?.name||publisherFor(url);if(publisher){source.site=clean(publisher);provenance.site='Structured publisher metadata or verified host identity';}}
  const book=nodes.find(n=>[n['@type']].flat().some(t=>t==='Book'||t==='https://schema.org/Book'));
  const journal=get('citation_journal_title');
  if(journal){Object.assign(source,{type:'article',journal,volume:get('citation_volume'),page:get('citation_firstpage'),year});delete source.site;delete source.url;}
@@ -78,8 +91,8 @@ const scheduleImport=createQueue(3);
 const cachedImport=memoizeImport(value=>scheduleImport(()=>runImport(value)));
 export function importURL(value){const url=sourceURL(value);url.hash='';return cachedImport(url.href);}
 async function runImport(value) {const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
- try{let url=archiveReplayURL(sourceURL(value).href);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return applyURLHints(page.result,url.href);if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);let result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);if(archiveOriginalURL(value)){result.originalURL=archiveOriginalURL(value);if(result.source.type==='web')result.source.url=value;result.warnings.unshift('Imported an archived version; verify its capture date.');if(/^Wayback Machine$/i.test(result.source.title)){result.source.title='';result.requiresReview=true;result.warnings.unshift('The archive returned its viewer rather than source content. Paste a downloaded or copied source to continue.');}}
- result=await enrichDOI(result,controller.signal);applyURLHints(result,page.archive?.originalURL||url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned HTTP '+page.archive.originalStatus+'; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
+ try{let url=archiveReplayURL(sourceURL(value).href);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result){if(['book','article'].includes(page.result.source.type))page.result.source.url=value;return applyURLHints(page.result,url.href);}if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=archiveReplayURL(sourceURL(new URL(page.redirect,url).href).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);let result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);if(archiveOriginalURL(value)){result.originalURL=archiveOriginalURL(value);if(result.source.type==='web')result.source.url=value;result.warnings.unshift('Imported an archived version; verify its capture date.');if(/^Wayback Machine$/i.test(result.source.title)){result.source.title='';result.requiresReview=true;result.warnings.unshift('The archive returned its viewer rather than source content. Paste a downloaded or copied source to continue.');}}
+ result=await enrichDOI(result,controller.signal);if(['book','article'].includes(result.source.type))result.source.url=value;applyURLHints(result,page.archive?.originalURL||url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned HTTP '+page.archive.originalStatus+'; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
  finally{clearTimeout(timer);}
 }

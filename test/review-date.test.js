@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';import {formatCitation,reviewDateISO,bluebookReviewDate} from '../formatter.js';
 const web={type:'web',title:'Report',site:'Research Institute',url:'https://example.com',reviewDate:'2026-10-31'};
-test('undated online source uses review day with Bluebook last-visited wording',()=>assert.equal(formatCitation(web).text,'Report, Research Institute, https://example.com (last visited Oct. 31, 2026).'));
+test('undated online source uses review day with Bluebook last-visited wording',()=>assert.equal(formatCitation(web).text,'Report, Research Institute, available at https://example.com (last visited Oct. 31, 2026).'));
 test('publication date is preserved and not replaced or duplicated by last visited',()=>{const result=formatCitation({...web,date:'Jan. 2, 2024'});assert.match(result.text,/\(Jan\. 2, 2024\)/);assert.ok(!result.text.includes('last visited'));});
 test('n.d. is treated as an unavailable publication date',()=>assert.match(formatCitation({...web,date:'n.d.'}).text,/last visited Oct\. 31, 2026/));
 test('review dates respect timezone day boundaries and leap days',()=>{assert.equal(reviewDateISO(new Date('2026-11-01T02:00:00Z'),'America/New_York'),'2026-10-31');assert.equal(bluebookReviewDate('2024-02-29'),'Feb. 29, 2024');assert.throws(()=>bluebookReviewDate('2026-02-29'));assert.throws(()=>bluebookReviewDate('2026-13-01'));});

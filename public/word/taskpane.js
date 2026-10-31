@@ -20,7 +20,7 @@ $('scan').onclick=()=>guarded(async()=>{
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
  status(`${entries.length} individual corrections ready. ${result.unresolved} items need manual review. Nothing has been replaced.`);
 });
-function showReview(entry){const card=document.createElement('article');const original=document.createElement('p');original.textContent=entry.original;card.append(original);const msg=document.createElement('p');msg.textContent=entry.message;card.append(msg);
+function showReview(entry){const card=document.createElement('article');const original=document.createElement('p');original.textContent=entry.original;card.append(original);const msg=document.createElement('p');msg.textContent=(entry.citation?.sourceType?'Source: '+({article:'journal article',book:'book',web:'online source',case:'case',statute:'statute'}[entry.citation.sourceType]||entry.citation.sourceType)+'. ':'')+entry.message;card.append(msg);
  const actionStatus=document.createElement('p');actionStatus.className='action-status';actionStatus.setAttribute('role','status');actionStatus.setAttribute('aria-live','polite');card.append(actionStatus);
  const update=text=>{actionStatus.textContent=text;status(text);};
  const act=(button,fn)=>runCardAction(button,actionStatus,update,fn);
@@ -75,7 +75,7 @@ function showSupraGroups(items){
  const author=field('Short author name',group.source.author);
  const button=document.createElement('button');button.textContent='Prepare supra replacements';button.onclick=()=>guarded(async()=>{
  // Prepare first, so invalid input cannot partially alter suggestions.
- const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({...preferences(),author:author.value,note:note.value,pinpoint:item.source.pinpoint,style:group.source.type==='book'?'smallcaps':'normal'})}));
+ const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({...preferences(),author:author.value,note:note.value,pinpoint:item.source.pinpoint,url:item.source.url,style:group.source.type==='book'?'smallcaps':'normal'})}));
  for(const replacement of replacements){replacement.entry.citation=replacement.citation;replacement.entry.message='Proposed supra short form. Verify the first-reference note number.';}
  $('results').replaceChildren();for(const entry of items)showReview(entry);status('Supra suggestions prepared. Review markup, then Apply / Replace each occurrence. The first full citation is retained.');
  });card.append(button);$('results').append(card);
