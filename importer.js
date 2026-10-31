@@ -1,3 +1,4 @@
+import {archiveSnapshot,doiLink} from './link-tools.js';
 import {publisherFor,applyPublisher,accessFallback,researchGateQuery,scholarlyMatch} from './source-fallbacks.js';
 import {downloadLimit} from './import-limits.js';
 import {documentKind,extractDocument} from './documents.js';
@@ -69,17 +70,19 @@ let active=0;
 export async function importURL(value) {
  if(active>=1)throw Error('Imports are busy. Try again shortly.');
  active++;const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
- try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return page.result;if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);return kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);}throw Error('Too many website redirects.');}
+ try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return page.result;if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);const result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned 404; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
  finally{clearTimeout(timer);active--;}
 }
 
 async function downloadWithCorrections(url,signal){
  try{return await download(url,signal);}catch(error){
+ const was404=error.status===404;
  // A 404 extensionless asset may be a PDF link copied without its suffix.
  if(error.status===404&&url.hostname==='assets.morningconsult.com'&&!/\.[a-z0-9]+$/i.test(url.pathname)){
  const corrected=new URL(url);corrected.pathname+='.pdf';try{const result=await download(corrected,signal);return {...result,correctedURL:corrected};}catch(correctionError){correctionError.message=`The original link returned 404. A .pdf version was also tried (${corrected.href}): ${correctionError.message}`;error=correctionError;}
  }
+ if(was404){try{const archive=await findArchive(url,signal);if(archive){let archiveURL=sourceURL(archive.url);for(let attempt=0;attempt<4;attempt++){const archived=await download(archiveURL,signal);if(archived.redirect){archiveURL=sourceURL(new URL(archived.redirect,archiveURL).href);if(archiveURL.hostname!=='web.archive.org')throw Error('Archive redirected away from its snapshot.');continue;}return {...archived,correctedURL:archiveURL,archive};}}}catch{}}
  // Query public scholarly metadata rather than retrying a protected PDF with evasive headers.
  const query=researchGateQuery(url.href);
  if(query&&[401,402,403,404,429].includes(error.status)){
@@ -88,4 +91,18 @@ async function downloadWithCorrections(url,signal){
  if([401,402,403,404,429].includes(error.status)){const fallback=accessFallback(url.href,error);if(fallback)return {result:fallback};}
  throw error;
  }
+}
+
+async function findArchive(url,signal){
+ const endpoint=new URL('https://archive.org/wayback/available');endpoint.searchParams.set('url',url.href);
+ const response=await download(endpoint,signal);if(!response.bytes||response.bytes.length>2_000_000)return null;
+ return archiveSnapshot(JSON.parse(response.bytes.toString('utf8')),url.href);
+}
+export async function permalinkURL(value){
+ const url=sourceURL(value);const addresses=await lookup(url.hostname,{all:true});if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw Error('Only public URLs can be looked up.');
+ const signal=AbortSignal.timeout(20000);const doi=doiLink(url.href);if(doi)return doi;
+ const query=researchGateQuery(url.href);
+ if(query){try{const endpoint=new URL('https://api.crossref.org/works');endpoint.searchParams.set('query.title',query.title);endpoint.searchParams.set('rows','5');const response=await download(endpoint,signal);const match=scholarlyMatch(JSON.parse(response.bytes).message?.items||[],query);if(match?.canonicalURL)return {url:match.canonicalURL,kind:'DOI (Crossref exact title/author match)',originalURL:url.href};}catch{}}
+ const archived=await findArchive(url,signal);if(archived)return archived;
+ throw Error('No existing archived snapshot or verified DOI was found. The original link was not changed.');
 }

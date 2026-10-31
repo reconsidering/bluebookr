@@ -65,3 +65,12 @@ function showSupraGroups(items){
 for(const id of ['citation-style','emphasis'])$(id).onchange=()=>guarded(async()=>{if(!demoMode)await release();$('results').replaceChildren();preview=null;$('insert').disabled=true;$('preview').replaceChildren();status('Preferences changed. Run Review suggestions again or preview your citation.');});
 
 try{const saved=JSON.parse(localStorage.getItem('bluebookr-preferences')||'{}');for(const id of ['citation-style','emphasis']){if([...$(id).options].some(o=>o.value===saved[id]))$(id).value=saved[id];$(id).addEventListener('change',()=>{try{localStorage.setItem('bluebookr-preferences',JSON.stringify({'citation-style':$('citation-style').value,emphasis:$('emphasis').value}));}catch{}});}}catch{}
+
+async function lookupPermalink(url){const response=await fetch('/api/permalink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});const result=await response.json();if(!response.ok)throw Error(result.error);return result;}
+$('permalink').onclick=()=>guarded(async()=>{status('Looking for an existing archive or DOI…');const result=await lookupPermalink($('url').value);$('url').value=result.url;status('Using '+result.kind+': '+result.url+'. Import it to review citation details.');});
+$('replace-link').onclick=()=>guarded(async()=>{
+ if(demoMode){status('In Word, select a bare URL or a single hyperlink, then use this action to replace its address with an existing archive or DOI.');return;}
+ await Word.run(async ctx=>{const range=ctx.document.getSelection();range.load('text,hyperlink');await ctx.sync();const originalText=range.text,originalLink=range.hyperlink;const address=originalLink||originalText.trim();if(!/^https?:\/\/\S+$/.test(address))throw Error('Select one complete URL or one hyperlink first.');ctx.trackedObjects.add(range);await ctx.sync();
+ try{status('Looking up a permalink…');const result=await lookupPermalink(address);range.load('text,hyperlink');await ctx.sync();if(range.text!==originalText||range.hyperlink!==originalLink)throw Error('The selection changed. Select the link and try again.');if(originalLink)range.hyperlink=result.url;else range.insertText(result.url,'Replace');await ctx.sync();status('Link replaced with '+result.kind+': '+result.url+'. Use Word Undo to reverse it.');}finally{ctx.trackedObjects.remove(range);await ctx.sync();}
+ });
+});
