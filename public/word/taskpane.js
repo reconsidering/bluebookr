@@ -1,3 +1,4 @@
+import {repeatedSources,supraCitation} from './supra.js';
 import {automaticFix} from './automatic.js';
 import {reviewText,citationHTML,citationChanges,goToCitation} from './review.js';
 import {schemas,formatCitation} from '/formatter.js';
@@ -8,10 +9,10 @@ const status=text=>{$('status').textContent=text;};
 async function guarded(fn){if(busy)return;busy=true;try{await fn();}catch(e){status(e.message||'Word could not complete the operation.');}finally{busy=false;}}
 async function release(){if(!entries.length)return;await Word.run(entries.map(e=>e.range),async ctx=>{for(const e of entries)ctx.trackedObjects.remove(e.range);await ctx.sync();});entries=[];}
 $('scan').onclick=()=>guarded(async()=>{
- if(demoMode){$('results').replaceChildren();const samples=$('scope').value==='selection'?['Brown v. Board of Education, 347 U.S. 483 (1954).']:['Brown v. Board of Education, 347 U.S. 483 (1954).','42 U.S.C. § 1983.','See id. at 495.'];for(const sample of samples)showReview(reviewText(sample));status('Preview: showing sample citations. No Word document is connected.');return;}
+ if(demoMode){$('results').replaceChildren();const samples=$('scope').value==='selection'?['Brown v. Board of Education, 347 U.S. 483 (1954).']:['Brown v. Board of Education, 347 U.S. 483 (1954).','42 U.S.C. § 1983.','Jane Smith, Legal Reasoning 12 (2024).','Jane Smith, Legal Reasoning 45 (2024).','See id. at 495.'];const demoEntries=samples.map(reviewText);showSupraGroups(demoEntries);for(const entry of demoEntries)showReview(entry);status('Preview: showing sample citations. No Word document is connected.');return;}
  await release();$('results').replaceChildren();
  const result=await automaticFix($('scope').value,status,{reviewOnly:true});entries=result.suggestions;
- for(const entry of entries)showReview(entry);
+ showSupraGroups(entries);for(const entry of entries)showReview(entry);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
  status(`${entries.length} individual corrections ready. ${result.unresolved} items need manual review. Nothing has been replaced.`);
 });
@@ -43,3 +44,19 @@ $('auto-fix').onclick=()=>guarded(async()=>{
  status(`Applied ${result.fixed} replacements. ${result.unresolved} items need review. Changes are drafts; use Word Undo to reverse them.`);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
 });
+
+function showSupraGroups(items){
+ for(const group of repeatedSources(items)){
+ const card=document.createElement('article');const heading=document.createElement('h3');heading.textContent='Repeated source: '+group.source.title;card.append(heading);
+ const explanation=document.createElement('p');explanation.textContent='Keep the first full citation. Confirm its actual footnote number to prepare supra replacements for later matches. Exact author/title/edition details must match. Cases and statutes are excluded.';card.append(explanation);
+ const field=(text,value='')=>{const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.value=value;label.append(input);card.append(label);return input;};
+ const note=field('First full citation’s footnote number');note.inputMode='numeric';
+ const author=field('Short author name',group.source.author);
+ const button=document.createElement('button');button.textContent='Prepare supra replacements';button.onclick=()=>guarded(async()=>{
+ // Prepare first, so invalid input cannot partially alter suggestions.
+ const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({author:author.value,note:note.value,pinpoint:item.source.pinpoint,style:group.source.type==='book'?'smallcaps':'normal'})}));
+ for(const replacement of replacements){replacement.entry.citation=replacement.citation;replacement.entry.message='Proposed supra short form. Verify the first-reference note number.';}
+ $('results').replaceChildren();for(const entry of items)showReview(entry);status('Supra suggestions prepared. Review markup, then Apply / Replace each occurrence. The first full citation is retained.');
+ });card.append(button);$('results').append(card);
+ }
+}
