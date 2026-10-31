@@ -102,3 +102,7 @@ HTTP content negotiation now permits application/json. Previously Crossref retur
 Direct Wayback links use the archive's raw replay endpoint to request file content, retain the user-facing archive URL, and resolve publisher identity from its original host. A Wayback viewer page is not treated as the document's title. Access restrictions or absent captures can still prevent recovery.
 
 In Word review mode, usable partial records for blocked sources have a source-verification checkbox before Apply/Replace. Automatic mode never applies them. Incomplete records get an Open original source link and Complete details / paste a copy action. These are review workflows, not successful live retrieval claims.
+
+## Windows installer
+
+A private Windows setup executable, source, uninstaller, and build instructions are in [installer/README.md](installer/README.md). Download it from `/downloads/BluebookrSetup.exe`; `/downloads/SHA256SUMS.txt` identifies the built artifact. It uses current-user Office sideload registration and provides a starter Word document plus Bluebookr ribbon commands. The manifest passed Microsoft's validation service; the unsigned Windows executable still needs installation testing on Windows. This is not a native COM/VSTO add-in and does not guarantee automatic ribbon activation in all documents.

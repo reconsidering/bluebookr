@@ -1,0 +1,26 @@
+BLUEBOOKR FOR DESKTOP WORD — PRIVATE INSTALLER 1.1.0
+
+1. Save documents and close ALL Word windows.
+2. Run BluebookrSetup.exe using your normal Windows account. No administrator privileges are requested.
+3. Finish setup and open the Bluebookr starter document. If Word asks you to trust the add-in, review its Bluebookr identity and permissions before accepting.
+4. Look for the Bluebookr ribbon tab, then Open Bluebookr. Test on a COPY of a document first.
+5. For a new document, if the tab is absent, open Home > Add-ins > More Add-ins / My Add-ins and look for Bluebookr in the developer add-ins list. Menu names vary by Word version. You should not need to run the installer again.
+
+WHAT SETUP CHANGES
+- Installs manifest.xml, a starter .docx, instructions, and an uninstaller under %LOCALAPPDATA%\Bluebookr.
+- Registers manifest ID 762eb57c-3a32-4929-856f-2bb41144b148 at HKCU\Software\Microsoft\Office\16.0\WEF\Developer, using the same per-user mechanism as Microsoft's office-addin-dev-settings register command. Registers both Office registry views on 64-bit Windows.
+- Adds current-user Start Menu shortcuts and a Windows Installed Apps uninstall entry.
+- Preserves a previous registration for this add-in ID and restores it on uninstall when setup still owns the registration.
+- Does not modify machine-wide settings, lower macro/security policies, configure network shares, install a COM/VSTO component, or edit your documents.
+
+LIMITS AND TROUBLESHOOTING
+This installer is unsigned. Windows may warn that the publisher is unknown. Do not disable security protections globally. If your system blocks execution, report the exact message rather than changing organization policies.
+Requires a modern desktop Word version supporting Office web add-ins and ribbon commands. Internet access is required to load https://bluebookr.onrender.com and Microsoft's Office.js. The installer does not install Word, Office, or WebView2. It cannot override Word account/tenant restrictions.
+This is persistent sideload registration, not a machine-wide COM add-in. The tab appears where Word has loaded the add-in; automatic global tab activation in every document is not guaranteed. Office host installation has NOT been verified on Windows in this build environment.
+Close Word completely after installing; use the Start Menu starter shortcut to try loading the add-in. If it does not load, report Word's product/version and the exact message. Previously configured shared-folder catalogs are not removed; remove duplicate manual registrations yourself only if you no longer need them.
+No user documents are removed by uninstalling. The installed starter document is owned by setup and is replaced on upgrade/removed on uninstall; save your work in separate documents.
+
+UNINSTALL
+Close Word, then Windows Settings > Apps > Installed Apps > Bluebookr for Word > Uninstall, or use Start > Bluebookr > Uninstall Bluebookr.
+
+Application code updates load from the hosted website. Changes to the local manifest/ribbon may require running a newer installer.
