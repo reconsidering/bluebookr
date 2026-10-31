@@ -1,3 +1,4 @@
+import {automaticFix} from './automatic.js';
 import {reviewText,citationHTML} from './review.js';
 import {schemas,formatCitation} from '/formatter.js';
 import {recognizeCitation} from '/recognition.js';
@@ -42,3 +43,11 @@ $('insert').onclick=()=>guarded(async()=>{if(!preview)throw Error('Preview the c
 if(demoMode){$('tools').hidden=false;status('Interactive preview — sample document only. Try both checking modes, or import a real URL.');}
 else if(typeof Office==='undefined')status('Open this sidebar from the Bluebookr add-in in Microsoft Word.');
 else Office.onReady(info=>{if(info.host!==Office.HostType.Word){status('Open this add-in in Microsoft Word.');return;}$('tools').hidden=false;status('Ready. Choose selected text or whole document.');});
+
+$('auto-fix').onclick=()=>guarded(async()=>{
+ if(demoMode){$('results').replaceChildren();const card=document.createElement('article');card.textContent='Sample result: Brown v. Board of Education, 347 U.S. 483 (1954). Citation typography applied. In Word, this action also replaces resolvable URLs and hyperlink text directly in the chosen scope.';$('results').append(card);status('Simulation only — no document was changed or read.');return;}
+ await release();$('results').replaceChildren();status('Finding citations and links…');
+ const result=await automaticFix($('scope').value,status);
+ status(`Applied ${result.fixed} replacements. ${result.unresolved} items need review. Changes are drafts; use Word Undo to reverse them.`);
+ for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
+});

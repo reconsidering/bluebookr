@@ -1,0 +1,15 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {rawURLs,automaticFix} from '../public/word/automatic.js';
+test('extracts URLs without sentence punctuation while preserving balanced parentheses',()=>assert.deepEqual(rawURLs('See https://example.com/a(b). Also https://example.com/foo).'),['https://example.com/a(b)','https://example.com/foo']));
+function mockWord(text,links=[]){
+ const changes=[];const make=(value,hyperlink)=>({text:value,hyperlink,load(){},insertHtml(html){changes.push(html);this.text=html;}});
+ const block=make(text);block.getHyperlinkRanges=()=>({items:links.map(l=>make(l.text,l.url)),load(){}});block.search=url=>({items:[make(url)],load(){}});
+ globalThis.Office={context:{requirements:{isSetSupported:()=>true}}};
+ globalThis.Word={run:async fn=>fn({document:{getSelection:()=>block},trackedObjects:{add(){},remove(){}},sync:async()=>{}})};
+ return {changes,block};
+}
+test('automatic citation correction applies formatted HTML without per-item confirmation',async()=>{const {changes}=mockWord('Brown v. Board of Education, 347 U.S. 483 (1954).');const r=await automaticFix('selection',()=>{});assert.equal(r.fixed,1);assert.match(changes[0],/<i>Brown/);});
+test('bare URLs and labeled hyperlinks are replaced once each',async()=>{const {changes}=mockWord('https://example.com One article',[{text:'One article',url:'https://example.org'}]);const original=globalThis.fetch;globalThis.fetch=async()=>({ok:true,json:async()=>({source:{type:'web',title:'Article',site:'News',url:'https://example.com'},provenance:{site:'Page metadata'}})});try{const r=await automaticFix('selection',()=>{});assert.equal(r.fixed,2);assert.equal(changes.length,2);}finally{globalThis.fetch=original;}});
+test('failed metadata lookup leaves original document content intact',async()=>{const {changes}=mockWord('https://example.com');const original=globalThis.fetch;globalThis.fetch=async()=>({ok:false,json:async()=>({error:'Not available'})});try{const r=await automaticFix('selection',()=>{});assert.equal(r.fixed,0);assert.equal(r.unresolved,1);assert.equal(changes.length,0);}finally{globalThis.fetch=original;}});
+test('changed document content is not replaced',async()=>{const {block,changes}=mockWord('Brown v. Board of Education, 347 U.S. 483 (1954).');const r=await automaticFix('selection',()=>{block.text='Changed by the writer';});assert.equal(r.fixed,0);assert.equal(r.unresolved,1);assert.equal(changes.length,0);});
