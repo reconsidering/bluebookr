@@ -1,7 +1,7 @@
 import {recognizeCitation} from '../../recognition.js';
 import {formatCitation} from '../../formatter.js';
 const normalize=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
-const signalPattern=/^(See,\s*e\.g\.,|See also|See generally|See|But see|But cf\.|Cf\.|E\.g\.,|Accord|Compare)\s+/i;
+const signalPattern=/^(See,\s*e\.g\.,|See also|See generally|See|But see|But cf\.|Cf\.|E\.g\.,|Accord|Compare),?\s+/i;
 function titleSpan(text,title){const letters=[],positions=[];let offset=0;for(const char of text){for(const c of normalize(char)){letters.push(c);positions.push({start:offset,end:offset+char.length});}offset+=char.length;}const hay=letters.join(''),needle=normalize(title);if(!needle)return null;const i=hay.indexOf(needle);if(i<0||hay.indexOf(needle,i+1)>=0)return null;return {start:positions[i].start,end:positions[i+needle.length-1].end};}
 function units(text){const result=[];let start=0;for(const match of text.matchAll(/;(?=\s|$)|[\r\n]/g)){result.push({start,end:match.index,text:text.slice(start,match.index),delimiter:match[0]});start=match.index+match[0].length;}result.push({start,end:text.length,text:text.slice(start),delimiter:''});return result;}
 export function planLinkedCitation(paragraph,targetText,source){

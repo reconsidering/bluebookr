@@ -1,6 +1,6 @@
 import {withCitation,actionError} from './actions.js';
 import {replaceCitation} from './replacement.js';
-import {repeatedSources,supraCitation} from './supra.js';
+import {repeatedSources,prepareSupra,shortAuthor,editedSupra} from './supra.js';
 import {automaticFix} from './automatic.js';
 import {reviewText,citationHTML,citationChanges,goToCitation} from './review.js';
 import {schemas,formatCitation,reviewDateISO} from '/formatter.js';
@@ -31,7 +31,7 @@ function showReview(entry){const card=document.createElement('article');const or
  const edit=document.createElement('textarea');edit.value=entry.citation.text;edit.setAttribute('aria-label','Edit suggested citation');card.append(edit);
  const updateMarkup=()=>{markup.replaceChildren();for(const part of citationChanges(entry.original,edit.value)){const span=document.createElement(part.kind==='delete'?'del':part.kind==='insert'?'ins':'span');span.textContent=part.text;markup.append(span);}if(edit.value===entry.original){const note=document.createElement('p');note.textContent='No text changes. Review proposed italics and small caps above.';markup.append(note);}};edit.addEventListener('input',updateMarkup);updateMarkup();
  const apply=document.createElement('button');apply.textContent='Apply / Replace';if(entry.requiresConfirmation){const label=document.createElement('label');const confirm=document.createElement('input');confirm.type='checkbox';confirm.style.width='auto';label.append(confirm,document.createTextNode(' I checked the source details and accessed the cited version.'));card.append(label);apply.disabled=true;confirm.onchange=()=>{apply.disabled=!confirm.checked;};}apply.onclick=()=>act(apply,async()=>{
- update('Preparing replacement…');const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});
+ update('Preparing replacement…');const citation=edit.value===entry.citation.text?entry.citation:(entry.citation.kind==='supra'?editedSupra(edit.value,entry.citation.supra,preferences()):formatCitation({...recognizeCitation(edit.value),...preferences()}));
  if(demoMode){suggestion.innerHTML=citationHTML(citation);update('Preview: correction accepted in this sample only. No document was changed.');return {disable:true,label:'Applied (preview)'};}
  let noteFormattingWarning='';
  await withCitation(entry,async(ctx,{range,paragraph})=>{
@@ -68,17 +68,22 @@ $('auto-fix').onclick=()=>guarded(async()=>{
 
 function showSupraGroups(items){
  for(const group of repeatedSources(items)){
+ if(group.prepared)continue;
  const card=document.createElement('article');const heading=document.createElement('h3');heading.textContent='Repeated source: '+group.source.title;card.append(heading);
- const explanation=document.createElement('p');explanation.textContent='Keep the first full citation. Confirm its actual footnote number to prepare supra replacements for later matches. Exact author/title/edition details must match. Cases and statutes are excluded.';card.append(explanation);
+ const explanation=document.createElement('p');explanation.textContent='Keep the first full citation. Confirm the actual footnote number containing the first full citation. Only later-note matches are shortened; repeats within that same note are left alone. Cases and statutes are excluded.';card.append(explanation);
  const field=(text,value='')=>{const label=document.createElement('label');label.textContent=text;const input=document.createElement('input');input.value=value;label.append(input);card.append(label);return input;};
  const note=field('First full citation’s footnote number');note.inputMode='numeric';
- const author=field('Short author name',group.source.author);
- const button=document.createElement('button');button.textContent='Prepare supra replacements';button.onclick=()=>guarded(async()=>{
- // Prepare first, so invalid input cannot partially alter suggestions.
- const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({...preferences(),author:author.value,note:note.value,pinpoint:item.source.pinpoint,url:item.source.url,style:group.source.type==='book'?'smallcaps':'normal'})}));
- for(const replacement of replacements){replacement.entry.citation=replacement.citation;replacement.entry.message='Proposed supra short form. Verify the first-reference note number.';}
- $('results').replaceChildren();for(const entry of items)showReview(entry);status('Supra suggestions prepared. Review markup, then Apply / Replace each occurrence. The first full citation is retained.');
- });card.append(button);$('results').append(card);
+ const author=field('Short author name',shortAuthor(group.source.author));
+ const title=field(group.requiresTitle?'Short title (required: multiple works by this author)':'Short title (optional)',group.requiresTitle?group.source.title:'');
+ const feedback=document.createElement('p');feedback.setAttribute('role','status');card.append(feedback);
+ const first=document.createElement('button');first.textContent='Go to first full citation';first.onclick=()=>guarded(async()=>{try{if(demoMode){feedback.textContent='Preview: this would select the first full citation in Word.';return;}await goToCitation(group.first.entry,Word.run,text=>{feedback.textContent=text;});feedback.textContent='First full citation selected. Enter its displayed footnote number above.';}catch(error){feedback.textContent=actionError(error);}});card.append(first);
+ const button=document.createElement('button');button.textContent='Prepare supra replacements';button.onclick=()=>{if(busy){feedback.textContent='Wait for the current action to finish.';return;}guarded(async()=>{
+ try{
+ const replacements=prepareSupra(group,{...preferences(),author:author.value,note:note.value,shortTitle:title.value});
+ for(const replacement of replacements){replacement.entry.supraOriginalSource=replacement.originalSource;replacement.entry.citation=replacement.citation;replacement.entry.message='Proposed supra short form. Verify the first-reference note number.';}
+ $('results').replaceChildren();showSupraGroups(items);for(const entry of items)showReview(entry);status(`${replacements.length} supra suggestions prepared. First full citation retained; use Apply / Replace for each later occurrence.`);
+ }catch(error){feedback.textContent=error.message;status(error.message);}
+ });};card.append(button);$('results').append(card);
  }
 }
 

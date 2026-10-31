@@ -22,6 +22,7 @@ export function formatCitation(input) {
   const warnings=[];
   if(input.signal){if(!/^(See,\s*e\.g\.,|See also|See generally|See|But see|But cf\.|Cf\.|E\.g\.,|Accord|Compare)$/i.test(input.signal))throw Error('Unsupported citation signal.');add(input.signal,'italic');add(' ');}
   if(input.type==='article'&&input.publicationDate&&input.publicationDate!==s.year)warnings.push('Journal citation uses the supplied year. Verify the volume year against the full publication date, which may be an earlier online-release date.');
+  if(input.type==='article'&&input.pageRange)warnings.push('The supplied article range '+input.pageRange+' was normalized to its first page. Add a specific pinpoint separately if needed.');
   switch(input.type) {
     case 'case':
       add(s.name,'italic'); add(`, ${s.volume} ${s.reporter} ${s.page}${pin} (${s.court ? s.court+' ' : ''}${s.year}).`);
@@ -30,9 +31,9 @@ export function formatCitation(input) {
     case 'statute': add(`${s.title} ${s.code} § ${s.section}${s.year ? ` (${s.year})` : ''}.`); warnings.push('Confirm the code edition or supplement date required for this source.'); break;
     case 'article': add(`${s.author}, `); add(s.title,'italic'); add(`, ${s.volume} `); add(s.journal,'smallcaps'); add(` ${s.page}${pin} (${s.year}).`); break;
     case 'book': add(s.author,'smallcaps'); add(', '); add(s.title,'smallcaps'); add(`${s.pinpoint ? ' '+s.pinpoint : ''} (${s.edition ? s.edition+' ed. ' : ''}${s.year}).`); break;
-    case 'web': if(/^(?:n\.?\s*d\.?|undated|unknown)$/i.test(s.date))s.date='';if(s.author)add(s.author+', '); add(s.title,'italic'); add(', '); add(s.site,'smallcaps'); add(`${s.date ? ' ('+s.date+')' : ''}, `);add('available at','italic');add(` ${s.url}${!s.date?' (last visited '+visitedDate+')':''}.`); if(!s.date)warnings.push('No publication date supplied. Last-visited date uses the Bluebookr review date; confirm access to the cited version, especially for archives or pasted content.'); break;
+    case 'web': if(/^(?:n\.?\s*d\.?|undated|unknown)$/i.test(s.date))s.date='';if(s.author)add(s.author+', '); add(s.title,'italic'); add(', '); add(s.site,'smallcaps'); add(`${s.date ? ' ('+s.date+')' : ''}, `);add(`${s.url}${!s.date?' (last visited '+visitedDate+')':''}.`); if(!s.date)warnings.push('No publication date supplied. Last-visited date uses the Bluebookr review date; confirm access to the cited version, especially for archives or pasted content.'); break;
   }
-  if(['book','article'].includes(input.type)&&s.url){parts.at(-1).text=parts.at(-1).text.replace(/\.$/,'');add(', ');add('available at','italic');add(' '+s.url+'.');}
+  if(['book','article'].includes(input.type)&&s.url){parts.at(-1).text=parts.at(-1).text.replace(/\.$/,'');add(', '+s.url+'.');}
   warnings.push(`Draft uses common ${options.citationStyle==='brief'?'legal-brief':'law-review'} citation patterns. Verify source abbreviations, applicable Bluebook rules, and local court requirements.`);
   return {text:parts.map(p=>p.text).join(''),parts,warnings,reviewDate,sourceType:input.type};
 }
