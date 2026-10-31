@@ -1,3 +1,4 @@
+import {createQueue} from './concurrency.js';
 import {archiveSnapshot,doiLink} from './link-tools.js';
 import {publisherFor,applyPublisher,accessFallback,researchGateQuery,scholarlyMatch} from './source-fallbacks.js';
 import {downloadLimit} from './import-limits.js';
@@ -66,13 +67,12 @@ async function download(url,signal) {
  });req.on('error',reject);
  });
 }
-let active=0;
-export async function importURL(value) {
- if(active>=1)throw Error('Imports are busy. Try again shortly.');
- active++;const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
+const scheduleImport=createQueue(3);
+export function importURL(value){return scheduleImport(()=>runImport(value));}
+async function runImport(value) {const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
  try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return page.result;if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);const result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned 404; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
- finally{clearTimeout(timer);active--;}
+ finally{clearTimeout(timer);}
 }
 
 async function downloadWithCorrections(url,signal){
