@@ -9,7 +9,7 @@ export function documentKind(bytes,contentType){
  throw Error('Unsupported document format. Use a PDF, DOCX, plain-text, or HTML link. Supported legacy Word .doc files must be valid OLE documents.');
 }
 export function extractDocument(bytes,kind,url){return new Promise((resolve,reject)=>{
- const worker=new Worker(new URL('./document-worker.js',import.meta.url),{workerData:{bytes,kind,url},resourceLimits:{maxOldGenerationSizeMb:192}});
+ const worker=new Worker(new URL('./document-worker.js',import.meta.url),{execArgv:[],workerData:{bytes,kind,url},resourceLimits:{maxOldGenerationSizeMb:192}});
  const timer=setTimeout(()=>{worker.terminate();reject(Error('Document parsing took too long. Enter source details manually.'));},90000);
  const finish=()=>{clearTimeout(timer);worker.terminate();};
  worker.once('message',message=>{finish();message.error?reject(Error(message.error)):resolve(message.result);});worker.once('error',error=>{finish();reject(Error('Unable to read this document: '+error.message));});worker.once('exit',code=>{clearTimeout(timer);if(code)reject(Error('Document parser stopped. The file may be too complex or damaged.'));});
