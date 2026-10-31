@@ -26,13 +26,13 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  const review=reviewText(candidate.text,{citationStyle,emphasis,reviewDate});// Preserve semicolon separators outside the range.
  if(!candidate.citation.text.endsWith('.')){review.citation.text=review.citation.text.replace(/\.$/,'');review.citation.parts.at(-1).text=review.citation.parts.at(-1).text.replace(/\.$/,'');}
  jobs.push({range,text:candidate.text,citation:review.citation});
- }continue;}
+ }}
  const review=reviewText(b.text,{citationStyle,emphasis,reviewDate});
  const seen=new Set();
  if(Office.context.requirements.isSetSupported('WordApi','1.3')){const links=b.getHyperlinkRanges();links.load('items');await ctx.sync();for(const r of links.items)r.load('text,hyperlink');await ctx.sync();for(const r of links.items){if(/^https?:\/\//i.test(r.hyperlink||'')){jobs.push({range:r,text:r.text,url:r.hyperlink,hyperlink:r.hyperlink});seen.add(r.text);seen.add(r.hyperlink);}}}
  else if(/https?:/.test(b.text))details.push('Hyperlink labels cannot be inspected on this Word version; only visible URLs are processed.');
  for(const url of new Set(rawURLs(b.text))){if(seen.has(url))continue;const matches=b.search(url,{matchCase:true,matchWildcards:false});matches.load('items');await ctx.sync();for(const r of matches.items){r.load('text');jobs.push({range:r,text:url,url});}}
- if(review&&!rawURLs(b.text).length&&!seen.size)note('Manual citation review: '+b.text.slice(0,180));
+ if(!candidates.length&&review&&!rawURLs(b.text).length&&!seen.size)note('Manual citation review: '+b.text.slice(0,180));
  }
  // Track locations before asynchronous website lookups; preserve a snapshot for stale-document checks.
  if(jobs.length>200)limited=true;
