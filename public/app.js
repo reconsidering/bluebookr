@@ -14,7 +14,7 @@ $('import-form').onsubmit=async e=>{
  if(initialForm!==JSON.stringify({type:$('type').value,...Object.fromEntries(new FormData($('form')))}))throw Error('Your source details changed while importing. Import again when you are ready to replace them.');
  $('type').value=data.source.type;render();for(const input of $('form').elements){if(input.name){input.value=data.source[input.name]||'';if(input.value)input.title=data.provenance[input.name]||'Publisher metadata — review before use';}}
  const missing=[...$('form').elements].filter(el=>el.required&&!el.value).map(el=>el.name);
- $('import-status').textContent=missing.length?'Source imported. Add missing details: '+missing.join(', ')+'. Review the imported fields.':'Source imported. Review the details and citation below.';
+ $('import-status').textContent=missing.length?'Source imported. Add missing details: '+missing.join(', ')+'. Review the imported fields.':'Source imported. Review the details and citation below.';if(data.warnings?.length)$('import-status').textContent+=' '+data.warnings.join(' ');
  if(!missing.length)$('form').requestSubmit();
  }catch(error){$('import-status').textContent=error.message+' You can still enter details below.';}finally{button.disabled=false;}
 };

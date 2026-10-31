@@ -1,1 +1,1 @@
-{"name":"bluebookr","version":"0.1.0","private":true,"type":"module","scripts":{"start":"node server.js","dev":"node --watch server.js","test":"node --test"},"engines":{"node":">=22"},"dependencies":{"cheerio":"^1.2.0","ipaddr.js":"^2.5.0"}}
+{"name":"bluebookr","version":"0.1.0","private":true,"type":"module","scripts":{"start":"node server.js","dev":"node --watch server.js","test":"node --test"},"engines":{"node":">=22"},"dependencies":{"cheerio":"^1.2.0","fflate":"^0.8.3","ipaddr.js":"^2.5.0","pdfjs-dist":"^6.4.299"}}

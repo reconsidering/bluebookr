@@ -18,7 +18,7 @@ POST JSON source details to `/api/format`; the `type` is `case`, `statute`, `art
 
 ## Scope
 
-This initial version applies common law-review full-citation templates. It can import HTML metadata from public URLs and recognize common pasted full citations. It does not parse uploaded documents, verify sources, automatically abbreviate titles, or generate short forms, id., signals, or jurisdiction-specific variants. Supply published abbreviations yourself. Book and journal typography follows law-review conventions; practitioner documents can differ. Copy produces plain text, so restore typography in your editor. Example journal, book, and website entries are fictional demonstrations.
+This initial version applies common law-review full-citation templates. It can import HTML metadata from public URLs and recognize common pasted full citations. It does not accept file uploads, verify sources, automatically abbreviate titles, or generate short forms, id., signals, or jurisdiction-specific variants. Supply published abbreviations yourself. Book and journal typography follows law-review conventions; practitioner documents can differ. Copy produces plain text, so restore typography in your editor. Example journal, book, and website entries are fictional demonstrations.
 
 Verify drafts against the applicable Bluebook edition. This project is not affiliated with or endorsed by its publishers.
 
@@ -31,8 +31,15 @@ Create a Web Service connected to this GitHub repository. Select branch `main`, 
 
 Paste a public URL or a full citation into the source input. Website imports read title, author, publication date, and site metadata. Journal imports recognize scholarly citation meta tags. Book imports recognize schema.org Book JSON-LD or ISBN citation metadata. Cornell US Code links identify title and section. Case URLs can supply a complete citation through citation_legal_case or dc.identifier metadata; arbitrary court pages are not yet parsed. Pasted full citations support common case, federal statute/regulation, journal article, and book patterns. Review detected type and all fields. The app formats immediately when required fields are available and otherwise lists missing details.
 
-Import is best effort: PDFs, paywalls, JavaScript-only pages, and unsupported metadata may require manual entry. Private network URLs and non-HTTP protocols are rejected. Each redirect is revalidated, DNS addresses are pinned to the request, and imports have size, time, and concurrent-request limits. Outbound website access is needed on the deployment host. No AI service is used. The managed development environment's egress proxy restricts live URL retrieval; extraction fixtures and local API checks do not establish production website reachability.
+Import is best effort: Paywalls, JavaScript-only pages, and unsupported metadata may require manual entry. Private network URLs and non-HTTP protocols are rejected. Each redirect is revalidated, DNS addresses are pinned to the request, and imports have size, time, and concurrent-request limits. Outbound website access is needed on the deployment host. No AI service is used. The managed development environment's egress proxy restricts live URL retrieval; extraction fixtures and local API checks do not establish production website reachability.
 
 ## Private Microsoft Word add-in
 
 See [WORD-SETUP.md](WORD-SETUP.md) for Windows and browser sideloading instructions and current checking coverage. The installation manifest is served at `/word/manifest.xml`; the sidebar is `/word/taskpane.html`. Selected text and whole-document review run locally, with individual Apply/Edit/Skip actions. Word-host validation is still required in your account.
+
+
+## Document links
+
+The same URL input and `/api/import` now accept PDF, DOCX, and plain-text links (10 MB download cap). PDF/DOCX formats are detected by signatures, so extensionless download links work. PDF extraction reads metadata and up to the first three pages of text; DOCX reads core metadata and initial paragraphs. Title fallback from extracted text is explicitly provisional. Publisher/site and publication date are not invented from hostnames, file timestamps, or PDF creation dates. Review those fields and choose the correct source type before formatting. Scanned PDFs require OCR, encrypted PDFs need an accessible copy, and legacy `.doc`, RTF, and image formats need conversion. No local file-upload interface is provided.
+
+Parsing runs in a disposable worker with a time limit, memory limit, and bounded DOCX expanded content. The shared import API also covers document URLs found during Word scans; missing required citation details are reported instead of automatically replacing them. Document bodies are not treated as bibliographic records: citations quoted inside a file are not assumed to identify the file itself.
