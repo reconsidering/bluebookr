@@ -1,5 +1,5 @@
 import http from 'node:http';
-import {importURL,permalinkURL} from './importer.js';
+import {importURL,permalinkURL,importCopiedSource} from './importer.js';
 import {recognizeCitation} from './recognition.js';
 import {readFile} from 'node:fs/promises';
 import {formatCitation} from './formatter.js';
@@ -7,8 +7,8 @@ const assets={'/concurrency.js':['../concurrency.js','text/javascript'],'/word/s
 const server=http.createServer(async(req,res)=>{
   const pathname=new URL(req.url,'http://localhost').pathname;
   const send=(status,data,type='application/json')=>{res.writeHead(status,{'Content-Type':type+'; charset=utf-8','X-Content-Type-Options':'nosniff','Content-Security-Policy':pathname.startsWith('/word/') ? "default-src 'self'; script-src 'self' https://appsforoffice.microsoft.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.office.com https://*.office365.com https://*.microsoft.com; img-src 'self' data:; object-src 'none'; base-uri 'none'" : "default-src 'self'; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'"});res.end(type==='application/json'?JSON.stringify(data):data);};
-  if(req.method==='POST' && ['/api/format','/api/import','/api/recognize','/api/permalink'].includes(pathname)) {
-    try { let body=''; for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>64000){send(413,{error:'Request is too large.'});return;}} const input=JSON.parse(body);send(200,pathname==='/api/permalink' ? await permalinkURL(input?.url) : pathname==='/api/import' ? await importURL(input?.url) : pathname==='/api/recognize' ? {source:recognizeCitation(input?.text),provenance:{}} : formatCitation(input)); }
+  if(req.method==='POST' && ['/api/format','/api/import','/api/recognize','/api/permalink','/api/import-copy'].includes(pathname)) {
+    try { let body=''; for await(const chunk of req){body+=chunk;if(Buffer.byteLength(body)>64000){send(413,{error:'Request is too large.'});return;}} const input=JSON.parse(body);send(200,pathname==='/api/import-copy' ? importCopiedSource(input?.url,input?.text) : pathname==='/api/permalink' ? await permalinkURL(input?.url) : pathname==='/api/import' ? await importURL(input?.url) : pathname==='/api/recognize' ? {source:recognizeCitation(input?.text),provenance:{}} : formatCitation(input)); }
     catch(e){send(400,{error:e instanceof SyntaxError?'Invalid JSON.':e.message});} return;
   }
   if(req.method==='GET' && Object.hasOwn(assets,pathname)) {const [file,type]=assets[pathname];try{send(200,await readFile(new URL('./public/'+file,import.meta.url)),type);}catch{send(500,{error:'Unable to load page.'});}return;}

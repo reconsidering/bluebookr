@@ -8,3 +8,5 @@ export function archiveSnapshot(data,original){
  url.protocol='https:';return {url:url.href,kind:'Wayback snapshot',originalURL:original,timestamp:m[1],warning:'An existing archived copy, not a guarantee of permanent availability. Review the captured version and date.'};
 }
 export function doiLink(value){const u=new URL(value);if(!['doi.org','dx.doi.org'].includes(u.hostname))return null;const doi=decodeURIComponent(u.pathname.slice(1));if(!/^10\.\d{4,9}\/\S+$/i.test(doi))return null;return {url:'https://doi.org/'+doi,kind:'DOI',originalURL:value};}
+
+export function shouldCheckArchive(status){return [403,404,429].includes(status);}

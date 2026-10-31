@@ -74,3 +74,5 @@ $('replace-link').onclick=()=>guarded(async()=>{
  try{status('Looking up a permalink…');const result=await lookupPermalink(address);range.load('text,hyperlink');await ctx.sync();if(range.text!==originalText||range.hyperlink!==originalLink)throw Error('The selection changed. Select the link and try again.');if(originalLink)range.hyperlink=result.url;else range.insertText(result.url,'Replace');await ctx.sync();status('Link replaced with '+result.kind+': '+result.url+'. Use Word Undo to reverse it.');}finally{ctx.trackedObjects.remove(range);await ctx.sync();}
  });
 });
+
+$('import-copy').onclick=()=>guarded(async()=>{const response=await fetch('/api/import-copy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:$('url').value,text:$('source-copy').value})});const data=await response.json();if(!response.ok)throw Error(data.error);$('type').value=data.source.type;fields(data.source);$('details').hidden=false;status(data.warnings.join(' '));});
