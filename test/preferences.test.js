@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {formatCitation} from '../formatter.js';
+import {citationHTML} from '../public/word/review.js';
+import {supraCitation} from '../public/word/supra.js';
+const book={type:'book',author:'Jane Smith',title:'Legal Reasoning',year:'2024'};
+test('academic books use small caps and brief books emphasize title only',()=>{const academic=formatCitation(book),brief=formatCitation({...book,citationStyle:'brief'});assert.equal(academic.parts[0].style,'smallcaps');assert.equal(brief.parts[0].style,'normal');assert.equal(brief.parts[2].style,'italic');assert.equal(academic.text,brief.text);});
+test('underline option propagates to Word HTML',()=>{const result=formatCitation({...book,citationStyle:'brief',emphasis:'underline'});assert.equal(result.parts[2].style,'underline');assert.match(citationHTML(result),/<u>Legal Reasoning<\/u>/);});
+test('brief journals use ordinary type for journal name and chosen emphasis for title',()=>{const result=formatCitation({type:'article',author:'Smith',title:'Law',volume:'10',journal:'Example L. Rev.',page:'1',year:'2024',citationStyle:'brief',emphasis:'underline'});assert.equal(result.parts.find(p=>p.text==='Law').style,'underline');assert.equal(result.parts.find(p=>p.text==='Example L. Rev.').style,'normal');});
+test('supra uses chosen emphasis and brief author typography',()=>{const c=supraCitation({author:'Smith',note:'12',style:'smallcaps',citationStyle:'brief',emphasis:'underline'});assert.equal(c.parts[0].style,'normal');assert.equal(c.parts[2].style,'underline');});
+test('rejects unsupported preferences',()=>assert.throws(()=>formatCitation({...book,citationStyle:'unknown'})));

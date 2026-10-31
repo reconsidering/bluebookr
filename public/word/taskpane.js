@@ -5,13 +5,14 @@ import {schemas,formatCitation} from '/formatter.js';
 import {recognizeCitation} from '/recognition.js';
 const demoMode=new URLSearchParams(location.search).get('preview')==='1';
 const $=id=>document.getElementById(id);let entries=[],preview=null,busy=false;
+const preferences=()=>({citationStyle:$('citation-style').value,emphasis:$('emphasis').value});
 const status=text=>{$('status').textContent=text;};
 async function guarded(fn){if(busy)return;busy=true;try{await fn();}catch(e){status(e.message||'Word could not complete the operation.');}finally{busy=false;}}
 async function release(){if(!entries.length)return;await Word.run(entries.map(e=>e.range),async ctx=>{for(const e of entries)ctx.trackedObjects.remove(e.range);await ctx.sync();});entries=[];}
 $('scan').onclick=()=>guarded(async()=>{
- if(demoMode){$('results').replaceChildren();const samples=$('scope').value==='selection'?['Brown v. Board of Education, 347 U.S. 483 (1954).']:['Brown v. Board of Education, 347 U.S. 483 (1954).','42 U.S.C. § 1983.','Jane Smith, Legal Reasoning 12 (2024).','Jane Smith, Legal Reasoning 45 (2024).','See id. at 495.'];const demoEntries=samples.map(reviewText);showSupraGroups(demoEntries);for(const entry of demoEntries)showReview(entry);status('Preview: showing sample citations. No Word document is connected.');return;}
+ if(demoMode){$('results').replaceChildren();const samples=$('scope').value==='selection'?['Brown v. Board of Education, 347 U.S. 483 (1954).']:['Brown v. Board of Education, 347 U.S. 483 (1954).','42 U.S.C. § 1983.','Jane Smith, Legal Reasoning 12 (2024).','Jane Smith, Legal Reasoning 45 (2024).','See id. at 495.'];const demoEntries=samples.map(text=>reviewText(text,preferences()));showSupraGroups(demoEntries);for(const entry of demoEntries)showReview(entry);status('Preview: showing sample citations. No Word document is connected.');return;}
  await release();$('results').replaceChildren();
- const result=await automaticFix($('scope').value,status,{reviewOnly:true});entries=result.suggestions;
+ const result=await automaticFix($('scope').value,status,{reviewOnly:true,...preferences()});entries=result.suggestions;
  showSupraGroups(entries);for(const entry of entries)showReview(entry);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
  status(`${entries.length} individual corrections ready. ${result.unresolved} items need manual review. Nothing has been replaced.`);
@@ -23,7 +24,7 @@ function showReview(entry){const card=document.createElement('article');const or
  const legend=document.createElement('p');legend.textContent='Changes: strikethrough = removed; underline = added. Final citation typography appears above. This comparison shows text changes, not existing Word formatting.';card.append(legend);
  const edit=document.createElement('textarea');edit.value=entry.citation.text;edit.setAttribute('aria-label','Edit suggested citation');card.append(edit);
  const updateMarkup=()=>{markup.replaceChildren();for(const part of citationChanges(entry.original,edit.value)){const span=document.createElement(part.kind==='delete'?'del':part.kind==='insert'?'ins':'span');span.textContent=part.text;markup.append(span);}if(edit.value===entry.original){const note=document.createElement('p');note.textContent='No text changes. Review proposed italics and small caps above.';markup.append(note);}};edit.addEventListener('input',updateMarkup);updateMarkup();
- const apply=document.createElement('button');apply.textContent='Apply / Replace';apply.onclick=()=>guarded(async()=>{const citation=edit.value===entry.citation.text?entry.citation:formatCitation(recognizeCitation(edit.value));if(demoMode){suggestion.innerHTML=citationHTML(citation);apply.disabled=true;status('Preview: correction accepted in this sample only. No document was changed.');return;}await Word.run([entry.range],async ctx=>{entry.range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(entry.range.text!==entry.snapshot||(entry.hyperlink&&entry.range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');entry.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();});apply.disabled=true;edit.disabled=true;locate.disabled=true;status('Correction applied. Use Word Undo to reverse it.');});card.append(apply);}
+ const apply=document.createElement('button');apply.textContent='Apply / Replace';apply.onclick=()=>guarded(async()=>{const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});if(demoMode){suggestion.innerHTML=citationHTML(citation);apply.disabled=true;status('Preview: correction accepted in this sample only. No document was changed.');return;}await Word.run([entry.range],async ctx=>{entry.range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(entry.range.text!==entry.snapshot||(entry.hyperlink&&entry.range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');entry.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();});apply.disabled=true;edit.disabled=true;locate.disabled=true;status('Correction applied. Use Word Undo to reverse it.');});card.append(apply);}
  const skip=document.createElement('button');skip.textContent='Skip';skip.onclick=()=>card.remove();card.append(skip);$('results').append(card);
 }
 for(const type of Object.keys(schemas)){const option=document.createElement('option');option.value=type;option.textContent=type;$('type').append(option);}
@@ -31,7 +32,7 @@ function fields(source={}){$('fields').replaceChildren();preview=null;$('insert'
 $('type').onchange=()=>fields();
 $('details').oninput=()=>{preview=null;$('insert').disabled=true;};
 $('url-form').onsubmit=e=>{e.preventDefault();guarded(async()=>{status('Reading source metadata…');const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:$('url').value})});const data=await response.json();if(!response.ok)throw Error(data.error);$('type').value=data.source.type;fields(data.source);$('details').hidden=false;status('Review the imported fields, add missing details, then preview.');});};
-$('details').onsubmit=e=>{e.preventDefault();guarded(async()=>{preview=formatCitation({type:$('type').value,...Object.fromEntries(new FormData($('details')))});$('preview').innerHTML=citationHTML(preview);const p=document.createElement('p');p.textContent=preview.warnings.join(' ');$('preview').append(p);$('insert').disabled=false;status('Review the draft, then place your cursor in Word and insert.');});};
+$('details').onsubmit=e=>{e.preventDefault();guarded(async()=>{preview=formatCitation({...preferences(),type:$('type').value,...Object.fromEntries(new FormData($('details')))});$('preview').innerHTML=citationHTML(preview);const p=document.createElement('p');p.textContent=preview.warnings.join(' ');$('preview').append(p);$('insert').disabled=false;status('Review the draft, then place your cursor in Word and insert.');});};
 $('insert').onclick=()=>guarded(async()=>{if(!preview)throw Error('Preview the citation first.');if(demoMode){status('Preview: this citation would be inserted at your cursor in Word.');return;}await Word.run(async ctx=>{const range=ctx.document.getSelection();range.load('text');await ctx.sync();if(range.text.trim())throw Error('Place the cursor at an insertion point. Clear the selection to avoid replacing existing text.');range.insertHtml(citationHTML(preview),'Replace');await ctx.sync();});status('Citation inserted.');});
 if(demoMode){$('tools').hidden=false;status('Interactive preview — sample document only. Try both checking modes, or import a real URL.');}
 else if(typeof Office==='undefined')status('Open this sidebar from the Bluebookr add-in in Microsoft Word.');
@@ -40,7 +41,7 @@ else Office.onReady(info=>{if(info.host!==Office.HostType.Word){status('Open thi
 $('auto-fix').onclick=()=>guarded(async()=>{
  if(demoMode){$('results').replaceChildren();const card=document.createElement('article');card.textContent='Sample result: Brown v. Board of Education, 347 U.S. 483 (1954). Citation typography applied. In Word, this action also replaces resolvable URLs and hyperlink text directly in the chosen scope.';$('results').append(card);status('Simulation only — no document was changed or read.');return;}
  await release();$('results').replaceChildren();status('Finding citations and links…');
- const result=await automaticFix($('scope').value,status);
+ const result=await automaticFix($('scope').value,status,preferences());
  status(`Applied ${result.fixed} replacements. ${result.unresolved} items need review. Changes are drafts; use Word Undo to reverse them.`);
  for(const detail of result.details){const p=document.createElement('p');p.textContent=detail;$('results').append(p);}
 });
@@ -54,9 +55,13 @@ function showSupraGroups(items){
  const author=field('Short author name',group.source.author);
  const button=document.createElement('button');button.textContent='Prepare supra replacements';button.onclick=()=>guarded(async()=>{
  // Prepare first, so invalid input cannot partially alter suggestions.
- const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({author:author.value,note:note.value,pinpoint:item.source.pinpoint,style:group.source.type==='book'?'smallcaps':'normal'})}));
+ const replacements=group.items.slice(1).map(item=>({entry:item.entry,citation:supraCitation({...preferences(),author:author.value,note:note.value,pinpoint:item.source.pinpoint,style:group.source.type==='book'?'smallcaps':'normal'})}));
  for(const replacement of replacements){replacement.entry.citation=replacement.citation;replacement.entry.message='Proposed supra short form. Verify the first-reference note number.';}
  $('results').replaceChildren();for(const entry of items)showReview(entry);status('Supra suggestions prepared. Review markup, then Apply / Replace each occurrence. The first full citation is retained.');
  });card.append(button);$('results').append(card);
  }
 }
+
+for(const id of ['citation-style','emphasis'])$(id).onchange=()=>guarded(async()=>{if(!demoMode)await release();$('results').replaceChildren();preview=null;$('insert').disabled=true;$('preview').replaceChildren();status('Preferences changed. Run Review suggestions again or preview your citation.');});
+
+try{const saved=JSON.parse(localStorage.getItem('bluebookr-preferences')||'{}');for(const id of ['citation-style','emphasis']){if([...$(id).options].some(o=>o.value===saved[id]))$(id).value=saved[id];$(id).addEventListener('change',()=>{try{localStorage.setItem('bluebookr-preferences',JSON.stringify({'citation-style':$('citation-style').value,emphasis:$('emphasis').value}));}catch{}});}}catch{}

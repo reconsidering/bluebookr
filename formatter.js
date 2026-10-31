@@ -8,13 +8,14 @@ export const schemas = {
 const required = {case:['name','volume','reporter','page','year'],statute:['title','code','section'],article:['author','title','volume','journal','page','year'],book:['author','title','year'],web:['title','site','url']};
 export function formatCitation(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || !Object.hasOwn(schemas,input.type)) throw new Error('Choose a supported source type.');
+  const options=citationOptions(input);
   const s = Object.fromEntries(schemas[input.type].map(k => [k, String(input[k] ?? '').trim()]));
   for (const [k,v] of Object.entries(s)) if(v.length > 2000 || /[\r\n\x00-\x1f]/.test(v)) throw new Error(`Invalid ${k}. Use one line, up to 2,000 characters.`);
   const missing = required[input.type].filter(k=>!s[k]);
   if(missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}.`);
   if(s.year && !/^\d{4}$/.test(s.year)) throw new Error('Year must have four digits.');
   if(s.url) { let u; try {u=new URL(s.url);} catch {throw new Error('Enter a valid URL.');} if(!['https:','http:'].includes(u.protocol)) throw new Error('URL must use HTTP or HTTPS.'); }
-  const parts=[]; const add=(text,style='normal')=>{if(text)parts.push({text,style});};
+  const parts=[]; const add=(text,style='normal')=>{if(options.citationStyle==='brief'&&style==='smallcaps')style=input.type==='book'&&text===s.title?'italic':'normal';if(style==='italic'&&options.emphasis==='underline')style='underline';if(text)parts.push({text,style});};
   const pin=s.pinpoint ? `, ${s.pinpoint}` : '';
   const warnings=[];
   switch(input.type) {
@@ -27,6 +28,12 @@ export function formatCitation(input) {
     case 'book': add(s.author,'smallcaps'); add(', '); add(s.title,'smallcaps'); add(`${s.pinpoint ? ' '+s.pinpoint : ''} (${s.edition ? s.edition+' ed. ' : ''}${s.year}).`); break;
     case 'web': if(s.author)add(s.author+', '); add(s.title,'italic'); add(', '); add(s.site,'smallcaps'); add(`${s.date ? ' ('+s.date+')' : ''}, ${s.url}.`); if(!s.date)warnings.push('No publication date supplied; verify whether a last-visited date is needed.'); break;
   }
-  warnings.push('Draft uses common law-review full-citation patterns. Verify source abbreviations and applicable Bluebook rules; short forms and jurisdiction-specific exceptions are not applied.');
+  warnings.push(`Draft uses common ${options.citationStyle==='brief'?'legal-brief':'law-review'} citation patterns. Verify source abbreviations, applicable Bluebook rules, and local court requirements.`);
   return {text:parts.map(p=>p.text).join(''),parts,warnings};
+}
+
+export function citationOptions(input={}){
+ const citationStyle=input.citationStyle??'academic',emphasis=input.emphasis??'italic';
+ if(!['academic','brief'].includes(citationStyle)||!['italic','underline'].includes(emphasis))throw Error('Choose a valid citation style and emphasis.');
+ return {citationStyle,emphasis};
 }
