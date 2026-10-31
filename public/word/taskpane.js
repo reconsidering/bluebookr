@@ -1,3 +1,4 @@
+import {withCitation,actionError} from './actions.js';
 import {replaceCitation} from './replacement.js';
 import {repeatedSources,supraCitation} from './supra.js';
 import {automaticFix} from './automatic.js';
@@ -8,7 +9,7 @@ const demoMode=new URLSearchParams(location.search).get('preview')==='1';
 const $=id=>document.getElementById(id);let entries=[],preview=null,busy=false;
 const preferences=()=>({reviewDate:reviewDateISO(),citationStyle:$('citation-style').value,emphasis:$('emphasis').value});
 const status=text=>{$('status').textContent=text;};
-async function guarded(fn){if(busy)return;busy=true;try{await fn();}catch(e){status(e.message||'Word could not complete the operation.');}finally{busy=false;}}
+async function guarded(fn){if(busy){status('Another action is still running. Please wait for it to finish.');return;}busy=true;try{await fn();}catch(e){status(e.message||'Word could not complete the operation.');}finally{busy=false;}}
 async function release(){if(!entries.length)return;await Word.run(entries.map(e=>e.range),async ctx=>{for(const e of entries)ctx.trackedObjects.remove(e.range);await ctx.sync();});entries=[];}
 $('scan').onclick=()=>guarded(async()=>{
  if(demoMode){$('results').replaceChildren();const samples=$('scope').value==='selection'?['Brown v. Board of Education, 347 U.S. 483 (1954).']:['Brown v. Board of Education, 347 U.S. 483 (1954).','42 U.S.C. § 1983.','Jane Smith, Legal Reasoning 12 (2024).','Jane Smith, Legal Reasoning 45 (2024).','See id. at 495.'];const demoEntries=samples.map(text=>reviewText(text,preferences()));showSupraGroups(demoEntries);for(const entry of demoEntries)showReview(entry);status('Preview: showing sample citations. No Word document is connected.');return;}
@@ -20,14 +21,30 @@ $('scan').onclick=()=>guarded(async()=>{
  status(`${entries.length} individual corrections ready. ${result.unresolved} items need manual review. Nothing has been replaced.`);
 });
 function showReview(entry){const card=document.createElement('article');const original=document.createElement('p');original.textContent=entry.original;card.append(original);const msg=document.createElement('p');msg.textContent=entry.message;card.append(msg);
- const locate=document.createElement('button');locate.textContent='Go to citation';locate.onclick=()=>guarded(async()=>{if(demoMode){status('Preview: Word would select this citation and scroll it into view.');return;}await goToCitation(entry);status('Citation selected in Word.');});card.append(locate);
+ const actionStatus=document.createElement('p');actionStatus.className='action-status';actionStatus.setAttribute('role','status');actionStatus.setAttribute('aria-live','polite');card.append(actionStatus);
+ const update=text=>{actionStatus.textContent=text;status(text);};
+ const act=(button,fn)=>runCardAction(button,actionStatus,update,fn);
+ const locate=document.createElement('button');locate.textContent='Go to citation';locate.onclick=()=>act(locate,async()=>{update('Locating citation in Word…');if(demoMode){update('Preview: Word would select this citation and scroll it into view.');return;}await goToCitation(entry,Word.run,update);update('Citation selected in Word.');});card.append(locate);
  if(entry.citation){const suggestion=document.createElement('div');suggestion.innerHTML=citationHTML(entry.citation);card.append(suggestion);const warnings=document.createElement('p');warnings.textContent=entry.citation.warnings.join(' ');card.append(warnings);
  const markup=document.createElement('div');markup.className='citation-markup';markup.setAttribute('aria-label','Marked-up citation changes');card.append(markup);
  const legend=document.createElement('p');legend.textContent='Changes: strikethrough = removed; underline = added. Final citation typography appears above. This comparison shows text changes, not existing Word formatting.';card.append(legend);
  const edit=document.createElement('textarea');edit.value=entry.citation.text;edit.setAttribute('aria-label','Edit suggested citation');card.append(edit);
  const updateMarkup=()=>{markup.replaceChildren();for(const part of citationChanges(entry.original,edit.value)){const span=document.createElement(part.kind==='delete'?'del':part.kind==='insert'?'ins':'span');span.textContent=part.text;markup.append(span);}if(edit.value===entry.original){const note=document.createElement('p');note.textContent='No text changes. Review proposed italics and small caps above.';markup.append(note);}};edit.addEventListener('input',updateMarkup);updateMarkup();
- const apply=document.createElement('button');apply.textContent='Apply / Replace';if(entry.requiresConfirmation){const label=document.createElement('label');const confirm=document.createElement('input');confirm.type='checkbox';confirm.style.width='auto';label.append(confirm,document.createTextNode(' I checked the source details and accessed the cited version.'));card.append(label);apply.disabled=true;confirm.onchange=()=>{apply.disabled=!confirm.checked;};}apply.onclick=()=>guarded(async()=>{const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});if(demoMode){suggestion.innerHTML=citationHTML(citation);apply.disabled=true;status('Preview: correction accepted in this sample only. No document was changed.');return;}let noteFormattingWarning='';await Word.run([entry.range],async ctx=>{entry.range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(entry.range.text!==entry.snapshot||(entry.hyperlink&&entry.range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');const replacement=await replaceCitation(entry.range,citation,ctx,entry.story);await ctx.sync();if(!replacement.smallCapsSupported&&citation.parts.some(p=>p.style==='smallcaps'))noteFormattingWarning=' Small caps need manual review on this Word version.';});apply.disabled=true;edit.disabled=true;locate.disabled=true;status('Correction applied. Use Word Undo to reverse it.'+noteFormattingWarning);});card.append(apply);}
- const skip=document.createElement('button');skip.textContent='Skip';skip.onclick=()=>card.remove();card.append(skip);$('results').append(card);
+ const apply=document.createElement('button');apply.textContent='Apply / Replace';if(entry.requiresConfirmation){const label=document.createElement('label');const confirm=document.createElement('input');confirm.type='checkbox';confirm.style.width='auto';label.append(confirm,document.createTextNode(' I checked the source details and accessed the cited version.'));card.append(label);apply.disabled=true;confirm.onchange=()=>{apply.disabled=!confirm.checked;};}apply.onclick=()=>act(apply,async()=>{
+ update('Preparing replacement…');const citation=edit.value===entry.citation.text?entry.citation:formatCitation({...recognizeCitation(edit.value),...preferences()});
+ if(demoMode){suggestion.innerHTML=citationHTML(citation);update('Preview: correction accepted in this sample only. No document was changed.');return {disable:true,label:'Applied (preview)'};}
+ let noteFormattingWarning='';
+ await withCitation(entry,async(ctx,{range,paragraph})=>{
+ update('Checking the citation range…');range.load(entry.hyperlink?'text,hyperlink':'text');await ctx.sync();if(range.text!==entry.snapshot||(entry.hyperlink&&range.hyperlink!==entry.hyperlink))throw Error('This text changed since checking. Scan again before applying.');
+ update('Replacing text and preserving its font…');const replacement=await replaceCitation(range,citation,ctx,entry.story);await ctx.sync();
+ if(!replacement.smallCapsSupported&&citation.parts.some(p=>p.style==='smallcaps'))noteFormattingWarning=' Small caps need manual review on this Word version.';
+ if(entry.locator&&paragraph){const current=paragraph.getRange('Content');current.load('text');await ctx.sync();entry.locator.paragraphSnapshot=current.text;}
+ else if(replacement.range){ctx.trackedObjects.add(replacement.range);ctx.trackedObjects.remove(entry.range);entry.range=replacement.range;await ctx.sync();}
+ entry.snapshot=citation.text;entry.hyperlink=undefined;entry.citation=citation;
+ });
+ edit.disabled=true;suggestion.innerHTML=citationHTML(citation);locate.disabled=false;update('Replaced in Word. Use Undo to reverse it.'+noteFormattingWarning);return {disable:true,label:'Replaced'};
+ });card.append(apply);}
+ const skip=document.createElement('button');skip.textContent='Skip';skip.onclick=()=>{if(busy){update('Wait for the current action before skipping this item.');return;}card.remove();};card.append(skip);$('results').append(card);
 }
 for(const type of Object.keys(schemas)){const option=document.createElement('option');option.value=type;option.textContent=type;$('type').append(option);}
 function fields(source={}){$('fields').replaceChildren();preview=null;$('insert').disabled=true;$('preview').replaceChildren();for(const key of schemas[$('type').value]){const label=document.createElement('label');label.textContent=key;const input=document.createElement('input');input.name=key;input.value=source[key]||'';label.append(input);$('fields').append(label);}}
@@ -83,4 +100,10 @@ $('import-copy').onclick=()=>guarded(async()=>{const response=await fetch('/api/
 function showRecovery(failure){
  if(!failure.url)return;const card=document.createElement('article');const heading=document.createElement('strong');heading.textContent='Source needs additional details';card.append(heading);const link=document.createElement('a');link.href=failure.url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open original source in browser';card.append(document.createElement('br'),link);const reason=document.createElement('p');reason.textContent=failure.error;card.append(reason);
  const recover=document.createElement('button');recover.textContent='Complete details / paste a copy';recover.onclick=()=>{$('url').value=failure.url;const source=failure.partial?.source;if(source){$('type').value=source.type;fields(source);$('details').hidden=false;}$('url').scrollIntoView({behavior:'smooth'});$('source-copy').closest('details').open=true;$('source-copy').focus();status('Open the source in your browser, then paste its details or complete the source fields.');};card.append(recover);$('results').append(card);
+}
+
+async function runCardAction(button,element,update,fn){
+ if(busy){update('Another action is still running. Please wait for it to finish.');try{element.scrollIntoView({block:'nearest'});}catch{}return;}
+ busy=true;const waiting=setTimeout(()=>update('Still waiting for Word to respond. Check whether Word has an open dialog before trying another action.'),20000);const label=button.textContent;button.disabled=true;button.textContent='Working…';try{element.scrollIntoView({block:'nearest'});}catch{}let result;
+ try{result=await fn();}catch(error){update('Action failed: '+actionError(error)+' If Word changed any text, use Undo and run a new review.');}finally{clearTimeout(waiting);busy=false;button.disabled=!!result?.disable;button.textContent=result?.label||label;}
 }

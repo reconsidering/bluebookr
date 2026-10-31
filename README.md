@@ -106,3 +106,7 @@ In Word review mode, usable partial records for blocked sources have a source-ve
 ## Windows installer
 
 A private Windows setup executable, source, uninstaller, and build instructions are in [installer/README.md](installer/README.md). Download it from `/downloads/BluebookrSetup.exe`; `/downloads/SHA256SUMS.txt` identifies the built artifact. It uses current-user Office sideload registration and provides a starter Word document plus Bluebookr ribbon commands. The manifest passed Microsoft's validation service; the unsigned Windows executable still needs installation testing on Windows. This is not a native COM/VSTO add-in and does not guarantee automatic ribbon activation in all documents.
+
+### Word action reliability
+
+Manual review actions now resolve note/paragraph locators in fresh request contexts rather than relying solely on retained note proxies. Paragraph snapshots and note counts prevent stale/ambiguous replacements. Go to verifies the resulting selection and exposes safe errors beside its button. Formatting-preserving replacement captures source character font properties, uses the first cited character for mixed fonts, and deliberately separates document font inheritance from citation-specific emphasis. Native note operations remain subject to the installed Word API support; real-host verification is still required.

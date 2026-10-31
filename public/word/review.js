@@ -1,3 +1,4 @@
+import {withCitation} from './actions.js';
 import {recognizeCitation} from '../../recognition.js';
 import {formatCitation} from '../../formatter.js';
 export function reviewText(text,options={}){
@@ -18,8 +19,13 @@ export function citationChanges(before,after){
  const parts=[];const add=(kind,text)=>{if(parts.at(-1)?.kind===kind)parts.at(-1).text+=text;else parts.push({kind,text});};
  let i=0,j=0;while(i<a.length||j<b.length){if(i<a.length&&j<b.length&&a[i]===b[j]){add('same',a[i++]);j++;}else if(i<a.length&&(j===b.length||table[i+1][j]>=table[i][j+1]))add('delete',a[i++]);else add('insert',b[j++]);}return parts;
 }
-export async function goToCitation(entry,run=Word.run){
- await run([entry.range],async ctx=>{entry.range.load('text');await ctx.sync();if(entry.range.text!==entry.snapshot)throw Error('This citation changed. Scan again to locate it safely.');entry.range.select('Select');await ctx.sync();});
+export async function goToCitation(entry,run=Word.run,progress=()=>{}){
+ await withCitation(entry,async(ctx,{range,note})=>{
+ range.load('text');await ctx.sync();if(range.text!==entry.snapshot)throw Error('This citation changed. Scan again to locate it safely.');
+ if(note?.reference){progress('Opening the note reference…');note.reference.select('Select');await ctx.sync();}
+ progress('Selecting citation text…');range.select('Select');await ctx.sync();
+ if(ctx.document?.getSelection){const selected=ctx.document.getSelection();selected.load('text');await ctx.sync();if(selected.text.replace(/\r/g,'')!==entry.snapshot.replace(/\r/g,''))throw Error('Word did not select the expected citation. Select it manually and run a new review.');}
+ },run);
 }
 
 export function citationCandidates(text){
