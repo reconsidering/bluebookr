@@ -1,3 +1,4 @@
+import {downloadLimit} from './import-limits.js';
 import {documentKind,extractDocument} from './documents.js';
 import {load} from 'cheerio';
 import {recognizeCitation} from './recognition.js';
@@ -52,17 +53,17 @@ async function download(url,signal) {
  if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw Error('Only public website addresses can be imported.');
  const address=addresses[0];
  return new Promise((resolve,reject)=>{
- const req=(url.protocol==='https:'?https:http).get(url,{signal,lookup:(_host,options,cb)=>options.all?cb(null,[address]):cb(null,address.address,address.family),headers:{'User-Agent':'Bluebookr/0.2 (citation metadata lookup)','Accept':'text/html,application/xhtml+xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain'}},res=>{
+ const req=(url.protocol==='https:'?https:http).get(url,{signal,lookup:(_host,options,cb)=>options.all?cb(null,[address]):cb(null,address.address,address.family),headers:{'User-Agent':'Bluebookr/0.2 (citation metadata lookup)','Accept':'text/html,application/xhtml+xml,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,text/plain'}},res=>{
  if([301,302,303,307,308].includes(res.statusCode)){res.resume();resolve({redirect:res.headers.location});return;}
  if(res.statusCode!==200){res.resume();reject(Error('This website could not be read. Enter the source details manually.'));return;}
- let size=0;const chunks=[];res.on('data',chunk=>{size+=chunk.length;if(size>10_000_000){res.destroy(Error('File is too large to import (10 MB limit).'));}else chunks.push(chunk);});res.on('end',()=>resolve({bytes:Buffer.concat(chunks),contentType:res.headers['content-type']}));res.on('error',reject);
+ let size=0;const chunks=[];res.on('data',chunk=>{size+=chunk.length;if(size>downloadLimit()){res.destroy(Error(`File exceeds the configured ${downloadLimit()/1024/1024} MB download limit.`));}else chunks.push(chunk);});res.on('end',()=>resolve({bytes:Buffer.concat(chunks),contentType:res.headers['content-type']}));res.on('error',reject);
  });req.on('error',reject);
  });
 }
 let active=0;
 export async function importURL(value) {
- if(active>=4)throw Error('Imports are busy. Try again shortly.');
- active++;const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),10000);
+ if(active>=1)throw Error('Imports are busy. Try again shortly.');
+ active++;const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
  try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await download(url,controller.signal);if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);return kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):await extractDocument(page.bytes,kind,url.href);}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
  finally{clearTimeout(timer);active--;}

@@ -1,0 +1,1 @@
+export function downloadLimit(value=process.env.MAX_DOWNLOAD_MB){const mb=value===undefined?50:Number(value);if(!Number.isInteger(mb)||mb<1||mb>200)throw Error('MAX_DOWNLOAD_MB must be an integer from 1 to 200.');return mb*1024*1024;}
