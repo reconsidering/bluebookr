@@ -1,5 +1,7 @@
+import {scanBlocks} from './scanning.js';
+import {replaceCitation} from './replacement.js';
 import {boundedMap} from '../../concurrency.js';
-import {reviewText,citationHTML,citationCandidates} from './review.js';
+import {reviewText,citationCandidates} from './review.js';
 import {formatCitation,reviewDateISO} from '../../formatter.js';
 export function rawURLs(text){return [...text.matchAll(/https?:\/\/[^\s<>"\u201c\u201d]+/gi)].map(m=>{let url=m[0].replace(/[.,;:!?]+$/,'');while(url.endsWith(')')&&(url.match(/\)/g)||[]).length>(url.match(/\(/g)||[]).length)url=url.slice(0,-1);return url;});}
 export async function automaticFix(scope,report,{reviewOnly=false,citationStyle='academic',emphasis='italic'}={}){
@@ -7,15 +9,10 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  let fixed=0,unresolved=0;const details=[];const cache=new Map();let limited=false;
  const note=text=>{unresolved++;details.push(text);};
  await Word.run(async ctx=>{
- const blocks=[];
- if(scope==='selection'){const selection=ctx.document.getSelection();selection.load('text');await ctx.sync();if(!selection.text.trim())throw Error('Select text first, or choose Whole document.');blocks.push(selection);}
- else{const collections=[ctx.document.body.paragraphs];let notes=[];
- if(Office.context.requirements.isSetSupported('WordApi','1.5')){const f=ctx.document.body.footnotes,e=ctx.document.body.endnotes;f.load('items');e.load('items');await ctx.sync();notes=[...f.items,...e.items];}else details.push('Footnotes and endnotes were not scanned on this Word version.');
- for(const n of notes)collections.push(n.body.paragraphs);for(const c of collections)c.load('items');await ctx.sync();for(const c of collections)for(const p of c.items)blocks.push(p.getRange('Content'));
- }
- for(const b of blocks)b.load('text');await ctx.sync();
+ const scanned=await scanBlocks(ctx,scope);const blocks=scanned.blocks;
+ if(scope!=='selection')details.push(`Scanned ${scanned.coverage.bodyParagraphs} body paragraphs, ${scanned.coverage.footnotes} footnotes, and ${scanned.coverage.endnotes} endnotes.${scanned.coverage.notesSupported?'':' Notes are unsupported and were not scanned.'}`);
  const jobs=[];
- for(const b of blocks){const candidates=citationCandidates(b.text);
+ for(const block of blocks){const b=block.range;const story=block.story;const candidates=citationCandidates(b.text);
  if(candidates.length){
  for(const candidate of candidates){let range=b;
  if(candidate.text!==b.text){
@@ -25,13 +22,13 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  }
  const review=reviewText(candidate.text,{citationStyle,emphasis,reviewDate});// Preserve semicolon separators outside the range.
  if(!candidate.citation.text.endsWith('.')){review.citation.text=review.citation.text.replace(/\.$/,'');review.citation.parts.at(-1).text=review.citation.parts.at(-1).text.replace(/\.$/,'');}
- jobs.push({range,text:candidate.text,citation:review.citation});
+ jobs.push({range,story,text:candidate.text,citation:review.citation});
  }}
  const review=reviewText(b.text,{citationStyle,emphasis,reviewDate});
  const seen=new Set();
- if(Office.context.requirements.isSetSupported('WordApi','1.3')){const links=b.getHyperlinkRanges();links.load('items');await ctx.sync();for(const r of links.items)r.load('text,hyperlink');await ctx.sync();for(const r of links.items){if(/^https?:\/\//i.test(r.hyperlink||'')){jobs.push({range:r,text:r.text,url:r.hyperlink,hyperlink:r.hyperlink});seen.add(r.text);seen.add(r.hyperlink);}}}
+ if(Office.context.requirements.isSetSupported('WordApi','1.3')){try{const links=b.getHyperlinkRanges();links.load('items');await ctx.sync();for(const r of links.items)r.load('text,hyperlink');await ctx.sync();for(const r of links.items){if(/^https?:\/\//i.test(r.hyperlink||'')){jobs.push({range:r,story,text:r.text,url:r.hyperlink,hyperlink:r.hyperlink});seen.add(r.text);seen.add(r.hyperlink);}}}catch{details.push('Hyperlink inspection failed in '+story+'; visible URLs and recognized citations are still processed.');}}
  else if(/https?:/.test(b.text))details.push('Hyperlink labels cannot be inspected on this Word version; only visible URLs are processed.');
- for(const url of new Set(rawURLs(b.text))){if(seen.has(url))continue;const matches=b.search(url,{matchCase:true,matchWildcards:false});matches.load('items');await ctx.sync();for(const r of matches.items){r.load('text');jobs.push({range:r,text:url,url});}}
+ for(const url of new Set(rawURLs(b.text))){if(seen.has(url))continue;const matches=b.search(url,{matchCase:true,matchWildcards:false});matches.load('items');await ctx.sync();for(const r of matches.items){r.load('text');jobs.push({range:r,story,text:url,url});}}
  if(!candidates.length&&review&&!rawURLs(b.text).length&&!seen.size)note('Manual citation review: '+b.text.slice(0,180));
  }
  // Track locations before asynchronous website lookups; preserve a snapshot for stale-document checks.
@@ -46,8 +43,8 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  if(!citation){const imported=cache.get(job.url);if(imported.error)throw imported.error;citation=imported.value;}
  job.range.load(job.hyperlink?'text,hyperlink':'text');await ctx.sync();
  if(job.range.text!==job.text||(job.hyperlink&&job.range.hyperlink!==job.hyperlink))throw Error('Text or hyperlink changed during processing.');
- if(reviewOnly){suggestions.push({range:job.range,original:job.text,snapshot:job.text,hyperlink:job.hyperlink,citation,requiresConfirmation:!!citation.requiresConfirmation,message:job.url?'Replace this URL or hyperlink with a citation draft.':'Apply citation formatting.'});continue;}
- job.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();fixed++;
+ if(reviewOnly){suggestions.push({range:job.range,story:job.story,original:job.text,snapshot:job.text,hyperlink:job.hyperlink,citation,requiresConfirmation:!!citation.requiresConfirmation,message:job.url?'Replace this URL or hyperlink with a citation draft.':'Apply citation formatting.'});continue;}
+ const replacement=await replaceCitation(job.range,citation,ctx,job.story);await ctx.sync();fixed++;if(!replacement.smallCapsSupported&&citation.parts.some(p=>p.style==='smallcaps'))details.push('Citation text was replaced in a note. Small caps need manual review on this Word version; italics and underline were applied.');
  }catch(e){failures.push({url:job.url,text:job.text,error:e.message,partial:e.partial});note((job.url||job.text.slice(0,100))+': '+(e.message||'Could not replace this item.'));}
  }}finally{for(const j of selected)if(!suggestions.some(s=>s.range===j.range))ctx.trackedObjects.remove(j.range);await ctx.sync();}
  });
