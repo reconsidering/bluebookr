@@ -1,3 +1,4 @@
+import {createHostScheduler,memoizeImport} from './request-policy.js';
 import {articleFromDOI,applyURLHints} from './citation-enrichment.js';
 import {createQueue} from './concurrency.js';
 import {archiveSnapshot,doiLink,shouldCheckArchive} from './link-tools.js';
@@ -56,7 +57,10 @@ export function extractMetadata(html,url) {
  if(statutePath){Object.keys(source).forEach(k=>delete source[k]);Object.assign(source,{type:'statute',title:statutePath[1],code:'U.S.C.',section:statutePath[2]});provenance.title=provenance.section='Cornell US Code URL';}
  return {source,provenance,warnings:['Imported from publisher metadata; review accuracy and abbreviations. Legal decisions and statutes may need a different source type.']};
 }
-async function download(url,signal) {
+const scheduleHost=createHostScheduler();
+function download(url,signal){return scheduleHost(url.hostname,()=>downloadNow(url,signal));}
+async function downloadNow(url,signal) {
+ signal.throwIfAborted();
  const hostname=url.hostname.replace(/^\[|\]$/g,'');
  const addresses=await lookup(hostname,{all:true});
  if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw Error('Only public website addresses can be imported.');
@@ -70,7 +74,8 @@ async function download(url,signal) {
  });
 }
 const scheduleImport=createQueue(3);
-export function importURL(value){return scheduleImport(()=>runImport(value));}
+const cachedImport=memoizeImport(value=>scheduleImport(()=>runImport(value)));
+export function importURL(value){const url=sourceURL(value);url.hash='';return cachedImport(url.href);}
 async function runImport(value) {const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
  try{let url=sourceURL(value);for(let i=0;i<5;i++){const page=await downloadWithCorrections(url,controller.signal);if(page.result)return applyURLHints(page.result,url.href);if(page.correctedURL)url=page.correctedURL;if(page.redirect){url=sourceURL(new URL(page.redirect,url).href);continue;}if(!page.bytes)throw Error('Website redirect had no destination.');const kind=documentKind(page.bytes,page.contentType);let result=kind==='html'?extractMetadata(page.bytes.toString('utf8'),url.href):applyPublisher(await extractDocument(page.bytes,kind,url.href),url.href);result=await enrichDOI(result,controller.signal);applyURLHints(result,page.archive?.originalURL||url.href);if(page.archive){applyPublisher(result,page.archive.originalURL);result.originalURL=page.archive.originalURL;result.permalink=page.archive;result.warnings.unshift('Original link returned HTTP '+page.archive.originalStatus+'; imported an existing Wayback snapshot from '+page.archive.timestamp+'. Review this archived version.');}return result;}throw Error('Too many website redirects.');}
  catch(error){if(controller.signal.aborted)throw Error('The website took too long to respond. Try again or enter details manually.');if(['ENOTFOUND','ECONNREFUSED','ENETUNREACH','ECONNRESET'].includes(error.code))throw Error('Could not reach this website. Check the URL or enter details manually.');throw error;}
