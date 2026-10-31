@@ -1,7 +1,8 @@
 import {reviewText,citationHTML} from './review.js';
 import {formatCitation} from '../../formatter.js';
 export function rawURLs(text){return [...text.matchAll(/https?:\/\/[^\s<>"\u201c\u201d]+/gi)].map(m=>{let url=m[0].replace(/[.,;:!?]+$/,'');while(url.endsWith(')')&&(url.match(/\)/g)||[]).length>(url.match(/\(/g)||[]).length)url=url.slice(0,-1);return url;});}
-export async function automaticFix(scope,report){
+export async function automaticFix(scope,report,{reviewOnly=false}={}){
+ const suggestions=[];
  let fixed=0,unresolved=0;const details=[];const cache=new Map();let limited=false;
  const note=text=>{unresolved++;details.push(text);};
  await Word.run(async ctx=>{
@@ -28,10 +29,11 @@ export async function automaticFix(scope,report){
  if(!citation){if(!cache.has(job.url))cache.set(job.url,(async()=>{const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url})});const data=await response.json();if(!response.ok)throw Error(data.error);if(data.source.type==='web'&&(!data.source.title||!data.source.site||data.provenance?.site?.includes('hostname')))throw Error('Publisher title or site name is missing.');return formatCitation(data.source);})());citation=await cache.get(job.url);}
  job.range.load(job.hyperlink?'text,hyperlink':'text');await ctx.sync();
  if(job.range.text!==job.text||(job.hyperlink&&job.range.hyperlink!==job.hyperlink))throw Error('Text or hyperlink changed during processing.');
+ if(reviewOnly){suggestions.push({range:job.range,original:job.text,snapshot:job.text,hyperlink:job.hyperlink,citation,message:job.url?'Replace this URL or hyperlink with a citation draft.':'Apply citation formatting.'});continue;}
  job.range.insertHtml(citationHTML(citation),'Replace');await ctx.sync();fixed++;
  }catch(e){note((job.url||job.text.slice(0,100))+': '+(e.message||'Could not replace this item.'));}
- }}finally{for(const j of selected)ctx.trackedObjects.remove(j.range);await ctx.sync();}
+ }}finally{for(const j of selected)if(!suggestions.some(s=>s.range===j.range))ctx.trackedObjects.remove(j.range);await ctx.sync();}
  });
  if(limited)details.push('Only the first 200 replacement candidates were processed.');
- return {fixed,unresolved,details};
+ return {fixed,unresolved,details,suggestions};
 }
