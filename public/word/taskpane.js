@@ -107,3 +107,5 @@ async function runCardAction(button,element,update,fn){
  busy=true;const waiting=setTimeout(()=>update('Still waiting for Word to respond. Check whether Word has an open dialog before trying another action.'),20000);const label=button.textContent;button.disabled=true;button.textContent='Working…';try{element.scrollIntoView({block:'nearest'});}catch{}let result;
  try{result=await fn();}catch(error){update('Action failed: '+actionError(error)+' If Word changed any text, use Undo and run a new review.');}finally{clearTimeout(waiting);busy=false;button.disabled=!!result?.disable;button.textContent=result?.label||label;}
 }
+
+$('reload-addin').onclick=()=>{if(busy){status('An action is still running. Wait for Word to respond before reloading.');return;}location.reload();};
