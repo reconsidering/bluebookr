@@ -1,9 +1,9 @@
 import {boundedMap} from '../../concurrency.js';
 import {reviewText,citationHTML} from './review.js';
-import {formatCitation} from '../../formatter.js';
+import {formatCitation,reviewDateISO} from '../../formatter.js';
 export function rawURLs(text){return [...text.matchAll(/https?:\/\/[^\s<>"\u201c\u201d]+/gi)].map(m=>{let url=m[0].replace(/[.,;:!?]+$/,'');while(url.endsWith(')')&&(url.match(/\)/g)||[]).length>(url.match(/\(/g)||[]).length)url=url.slice(0,-1);return url;});}
 export async function automaticFix(scope,report,{reviewOnly=false,citationStyle='academic',emphasis='italic'}={}){
- const suggestions=[];
+ const suggestions=[];const reviewDate=reviewDateISO();
  let fixed=0,unresolved=0;const details=[];const cache=new Map();let limited=false;
  const note=text=>{unresolved++;details.push(text);};
  await Word.run(async ctx=>{
@@ -15,7 +15,7 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  }
  for(const b of blocks)b.load('text');await ctx.sync();
  const jobs=[];
- for(const b of blocks){const review=reviewText(b.text,{citationStyle,emphasis});if(review?.citation){jobs.push({range:b,text:b.text,citation:review.citation});continue;}
+ for(const b of blocks){const review=reviewText(b.text,{citationStyle,emphasis,reviewDate});if(review?.citation){jobs.push({range:b,text:b.text,citation:review.citation});continue;}
  const seen=new Set();
  if(Office.context.requirements.isSetSupported('WordApi','1.3')){const links=b.getHyperlinkRanges();links.load('items');await ctx.sync();for(const r of links.items)r.load('text,hyperlink');await ctx.sync();for(const r of links.items){if(/^https?:\/\//i.test(r.hyperlink||'')){jobs.push({range:r,text:r.text,url:r.hyperlink,hyperlink:r.hyperlink});seen.add(r.text);seen.add(r.hyperlink);}}}
  else if(/https?:/.test(b.text))details.push('Hyperlink labels cannot be inspected on this Word version; only visible URLs are processed.');
@@ -27,7 +27,7 @@ export async function automaticFix(scope,report,{reviewOnly=false,citationStyle=
  const selected=jobs.slice(0,200);for(const j of selected)ctx.trackedObjects.add(j.range);await ctx.sync();
  try{
  const urls=[...new Set(selected.filter(j=>j.url).map(j=>j.url))];let completed=0;
- const imported=await boundedMap(urls,3,async url=>{try{const job={url};const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url})});const data=await response.json();if(!response.ok)throw Error(data.error);if(data.requiresReview)throw Error(data.warnings.join(' '));if(data.source.type==='web'&&(!data.source.title||!data.source.site||data.provenance?.site?.includes('hostname')))throw Error('Publisher title or site name is missing.');return formatCitation({...data.source,citationStyle,emphasis});}finally{report(`Imported ${++completed} of ${urls.length} unique sources…`);}});
+ const imported=await boundedMap(urls,3,async url=>{try{const job={url};const response=await fetch('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:job.url})});const data=await response.json();if(!response.ok)throw Error(data.error);if(data.requiresReview)throw Error(data.warnings.join(' '));if(data.source.type==='web'&&(!data.source.title||!data.source.site||data.provenance?.site?.includes('hostname')))throw Error('Publisher title or site name is missing.');return formatCitation({...data.source,citationStyle,emphasis,reviewDate});}finally{report(`Imported ${++completed} of ${urls.length} unique sources…`);}});
  urls.forEach((url,i)=>cache.set(url,imported[i]));
  for(let i=0;i<selected.length;i++){const job=selected[i];report(`Fixing item ${i+1} of ${selected.length}…`);
  try{let citation=job.citation;

@@ -1,11 +1,11 @@
 import {repeatedSources,supraCitation} from './supra.js';
 import {automaticFix} from './automatic.js';
 import {reviewText,citationHTML,citationChanges,goToCitation} from './review.js';
-import {schemas,formatCitation} from '/formatter.js';
+import {schemas,formatCitation,reviewDateISO} from '/formatter.js';
 import {recognizeCitation} from '/recognition.js';
 const demoMode=new URLSearchParams(location.search).get('preview')==='1';
 const $=id=>document.getElementById(id);let entries=[],preview=null,busy=false;
-const preferences=()=>({citationStyle:$('citation-style').value,emphasis:$('emphasis').value});
+const preferences=()=>({reviewDate:reviewDateISO(),citationStyle:$('citation-style').value,emphasis:$('emphasis').value});
 const status=text=>{$('status').textContent=text;};
 async function guarded(fn){if(busy)return;busy=true;try{await fn();}catch(e){status(e.message||'Word could not complete the operation.');}finally{busy=false;}}
 async function release(){if(!entries.length)return;await Word.run(entries.map(e=>e.range),async ctx=>{for(const e of entries)ctx.trackedObjects.remove(e.range);await ctx.sync();});entries=[];}
